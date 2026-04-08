@@ -9,6 +9,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 
+import java.util.List;
+
 @Transactional
 @Service
 public class UserServiceImpl implements UserService {
@@ -45,5 +47,10 @@ public class UserServiceImpl implements UserService {
 
         user.getRoles().add(role);
         return userRepository.save(user);
+    }
+
+    @Override
+    public List<MyUser> findAllUsers() {
+        return userRepository.findAll();
     }
 }
