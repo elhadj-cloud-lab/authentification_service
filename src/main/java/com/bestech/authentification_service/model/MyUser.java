@@ -21,6 +21,7 @@ public class MyUser {
     private String username;
     private String password;
     private Boolean enabled;
+    private String email;
 
     /*@ManyToMany(cascade=CascadeType.ALL, fetch = FetchType.EAGER)*/
     @ManyToMany(cascade = CascadeType.MERGE, fetch = FetchType.EAGER)
