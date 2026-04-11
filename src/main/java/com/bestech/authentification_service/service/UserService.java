@@ -2,6 +2,7 @@ package com.bestech.authentification_service.service;
 
 import com.bestech.authentification_service.model.MyUser;
 import com.bestech.authentification_service.model.Role;
+import com.bestech.authentification_service.service.register.RegistrationRequest;
 
 import java.util.List;
 
@@ -12,4 +13,8 @@ public interface UserService {
     Role addRole(Role role);
     MyUser addRoleToUser(String username, String rolename);
     List<MyUser> findAllUsers();
+    MyUser registerUser(RegistrationRequest request);
+
+    public void sendEmailUser(MyUser user, String code);
+    public MyUser validateToken(String code);
 }
