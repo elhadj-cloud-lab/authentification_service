@@ -34,6 +34,6 @@ public class MyUserDetailsService implements UserDetailsService {
             auths.add(auhority);
         });
 
-        return new User(user.getUsername(),user.getPassword(),auths);
+        return new User(user.getUsername(), user.getPassword(), user.getEnabled(), true, true, true,auths);
     }
 }
