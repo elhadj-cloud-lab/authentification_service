@@ -1,0 +1,53 @@
+server:
+  port: 8080
+  error:
+    include-message: always
+  servlet:
+    context-path: /users
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+        #include: health,info,metrics
+  health:
+    db:
+      enabled: true
+
+jwt:
+  secret: ${JWT_SECRET}
+  expiration: 864000000
+  refresh-expiration: 604800000
+
+spring:
+  application:
+    name: authentification-service
+  datasource:
+    url: ${SPRING_DATASOURCE_URL_USER}
+    username: ${SPRING_DATASOURCE_USERNAME}
+    password: ${SPRING_DATASOURCE_PASSWORD}
+
+  jpa:
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+    hibernate:
+      ddl-auto: validate
+      jdbc:
+        batch_size: 20
+    show-sql: false
+    open-in-view: false
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+
+  mail:
+    default-encoding: UTF-8
+    host: smtp.gmail.com
+    port: 587
+    username: ${MAIL_USERNAME}
+    password: ${MAIL_PASSWORD}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
