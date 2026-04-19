@@ -1,27 +1,49 @@
 server:
-  port: 8082
+  port: 8080
   servlet:
     context-path: /users
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+        #include: health,info,metrics
+  health:
+    db:
+      enabled: true
+
+jwt:
+  secret: ${JWT_SECRET}
+  expiration: 864000000
+  refresh-expiration: 604800000
+
 spring:
   application:
     name: authentification-service
   datasource:
-    url: jdbc:postgresql://localhost:5432/db_users
-    driver-class-name: org.postgresql.Driver
-    username: postgres
-    password: postgres
+    url: ${SPRING_DATASOURCE_URL}
+    username: ${SPRING_DATASOURCE_USERNAME}
+    password: ${SPRING_DATASOURCE_PASSWORD}
+
   jpa:
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
     hibernate:
-      ddl-auto: update
-    show-sql: true
-    open-in-view: false
-  main:
-    allow-circular-references: true
+      ddl-auto: validate
+      jdbc:
+        batch_size: 20
+    show-sql: false
+    # open-in-view: false
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+
+#  main:
+#    allow-circular-references: true
   mail:
     default-encoding: UTF-8
     host: smtp.gmail.com
     port: 587
-    username: elhadjbs59@gmail.com
+    username: ${MAIL_USERNAME}
     password: ${MAIL_PASSWORD}
     properties:
       mail:
