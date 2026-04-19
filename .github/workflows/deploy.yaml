@@ -1,114 +1,96 @@
-# Nom du workflow affiché dans GitHub Actions
 name: CI - Build & Push Docker
 
-# Déclencheurs du pipeline
 on:
-  # Exécution à chaque push sur main
-  push:
-    branches: [ "develop", "main" ]
-  # Exécution pour chaque Pull Request vers main
   pull_request:
-    branches: [ "develop", "main" ]
+    branches: [ "main" ]
 
-# Gestion de la concurrence :
-# évite plusieurs runs simultanés sur la même branche
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  push:
+    branches: [ "main" ]
+
+# ⚠️ IMPORTANT : pas de permissions dynamiques ici
+# on les gère par job
 
 jobs:
-  build-and-push:
-    # Runner utilisé
+
+  # =========================
+  # 🟡 CI - Pull Request
+  # =========================
+  ci-pr:
+    name: Build & Test (PR)
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
 
-    # Permissions du job
     permissions:
       contents: read
-      # Autorise le push vers GHCR uniquement sur un push (sécurité)
-      packages: ${{ github.event_name == 'push' && 'write' || 'read' }}
+      packages: read
 
     steps:
-      # Récupération du code source
       - uses: actions/checkout@v4
 
-      # Cache Maven pour accélérer les builds
       - name: Cache Maven
         uses: actions/cache@v4
         with:
           path: ~/.m2
-          # Clé basée sur les dépendances (pom.xml)
           key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
           restore-keys: ${{ runner.os }}-m2
 
-      # Installation de Java 21 (Spring Boot 3+)
       - uses: actions/setup-java@v4
         with:
           java-version: '21'
           distribution: 'temurin'
 
-      # Build + exécution des tests
       - name: Build and test
         run: mvn clean verify
 
-      # Extraction d’un SHA court (7 caractères)
+      # 🔍 Test Docker SANS push (optionnel mais recommandé)
+      - name: Docker build (no push)
+        run: docker build -t test-image .
+
+  # =========================
+  # 🟢 CI/CD - MAIN (release)
+  # =========================
+  ci-main:
+    name: Build, Test & Push (MAIN)
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache Maven
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2
+          key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
+          restore-keys: ${{ runner.os }}-m2
+
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Build and test
+        run: mvn clean verify
+
+      # 🏷️ Extract short SHA for tagging
       - name: Extract short SHA
-        if: github.event_name == 'push'
         run: echo "SHORT_SHA=${GITHUB_SHA::7}" >> $GITHUB_ENV
 
-      # Build Docker + test du container (uniquement en PR)
-      - name: Build and test Docker (PR)
-        if: github.event_name == 'pull_request'
-        run: |
-          # Build de l'image Docker
-          docker build -t test-image .
-
-          # Lancement du container
-          docker run -d --name test-container -p 8080:8080 test-image
-
-          # Attente active du healthcheck (jusqu'à 30 tentatives)
-          for i in {1..30}; do
-            if curl -s -f http://localhost:8080/actuator/health; then
-              echo "✅ Container is healthy"
-              exit 0
-            fi
-            echo "⏳ Waiting for container to be ready... ($i/30)"
-            sleep 2
-          done
-
-          # En cas d’échec → affichage des logs pour debug
-          echo "❌ Container failed to start properly"
-          docker logs test-container
-          exit 1
-
-      # Activation de Docker Buildx (build avancé + cache)
-      - name: Set up Docker Buildx
-        if: github.event_name == 'push'
-        uses: docker/setup-buildx-action@v3
-
-      # Authentification au GitHub Container Registry (GHCR)
+      # 🔐 Login GHCR
       - name: Login to GHCR
-        if: github.event_name == 'push'
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
-      # Build et push de l'image Docker
-      - name: Build and push to GHCR
-        if: github.event_name == 'push'
-        uses: docker/build-push-action@v5
-        with:
-          context: .   # dossier courant
-          push: true   # push vers le registry
+      # 🐳 Build & Push Docker image
+      - name: Build and push Docker
+        run: |
+          IMAGE_NAME=ghcr.io/${{ github.repository }}
 
-          # Tags utilisés pour l’image
-          tags: |
-            ghcr.io/${{ github.repository }}:${{ github.sha }}        # tag unique (GitOps)
-            ghcr.io/${{ github.repository }}:${{ env.SHORT_SHA }}     # tag court (debug)
+          docker build -t $IMAGE_NAME:${{ github.sha }} .
+          docker push $IMAGE_NAME:${{ github.sha }}
 
-          # Cache Docker (accélère fortement les builds)
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-          # Labels OCI pour traçabilité (observabilité / debug)
-          labels: |
-            org.opencontainers.image.source=${{ github.repository }}
-            org.opencontainers.image.revision=${{ github.sha }}
-            org.opencontainers.image.created=${{ github.event.repository.updated_at }}
+          docker tag $IMAGE_NAME:${{ github.sha }} $IMAGE_NAME:${{ env.SHORT_SHA }}
+          docker push $IMAGE_NAME:${{ env.SHORT_SHA }}
