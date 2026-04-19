@@ -8,6 +8,7 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -21,6 +22,9 @@ import java.util.List;
 
 public class JWTAuthorizationFilter extends OncePerRequestFilter {
 
+    @Value("${jwt.secret}")
+    private String SECRET;
+
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain) throws ServletException, IOException {
         String jwt =request.getHeader("Authorization");
@@ -31,7 +35,7 @@ public class JWTAuthorizationFilter extends OncePerRequestFilter {
             return;
         }
 
-        JWTVerifier verifier = JWT.require(Algorithm.HMAC256(SecretParams.SECRET)).build();
+        JWTVerifier verifier = JWT.require(Algorithm.HMAC256(SECRET)).build();
         jwt= jwt.substring(7);
 
         DecodedJWT decodedJWT  = verifier.verify(jwt);

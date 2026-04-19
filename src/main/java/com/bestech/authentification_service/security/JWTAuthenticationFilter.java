@@ -16,6 +16,7 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
+import org.springframework.beans.factory.annotation.Value;
 
 import java.io.IOException;
 import java.io.PrintWriter;
@@ -25,9 +26,14 @@ public class JWTAuthenticationFilter extends UsernamePasswordAuthenticationFilte
 
     private AuthenticationManager authenticationManager;
 
-    public JWTAuthenticationFilter(AuthenticationManager authenticationManager) {
+    private final Long expTime;
+    private final String secret;
+
+    public JWTAuthenticationFilter(AuthenticationManager authenticationManager, Long expTime, String secret) {
         super();
         this.authenticationManager = authenticationManager;
+        this.expTime = expTime;
+        this.secret = secret;
     }
 
     @Override
@@ -64,8 +70,8 @@ public class JWTAuthenticationFilter extends UsernamePasswordAuthenticationFilte
         String jwt = JWT.create().
                 withSubject(springUser.getUsername()).
                 withArrayClaim("roles", roles.toArray(new String[roles.size()])).
-                withExpiresAt(new Date(System.currentTimeMillis() + SecretParams.EXP_TIME)).
-                sign(Algorithm.HMAC256(SecretParams.SECRET));
+                withExpiresAt(new Date(System.currentTimeMillis() + this.expTime)).
+                sign(Algorithm.HMAC256(this.secret));
 
         response.addHeader("Authorization", jwt);
     }
