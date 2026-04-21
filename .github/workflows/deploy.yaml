@@ -5,14 +5,43 @@ on:
     branches: [ "develop" ]
 
   push:
-    branches: [ "main", "develop" ]
+    branches: [ "develop", "main" ]
     tags: [ "v*" ]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  REGISTRY: ghcr.io
+  REGISTRY_IMAGE: ${{ github.repository }}
+
 jobs:
+  # =========================
+  # 🔒 SECURITY SCAN
+  # =========================
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@0.30.0
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+
+      - name: Upload Trivy results
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-results.sarif'
 
   # =========================
   # 🟡 CI - Pull Request
@@ -21,13 +50,10 @@ jobs:
     name: Build & Test (PR)
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
+    needs: [security-scan]
     permissions:
       contents: read
       packages: read
-
     steps:
       - uses: actions/checkout@v4
 
@@ -40,157 +66,202 @@ jobs:
       - name: Build and test
         run: mvn clean verify
 
-      - name: Upload Surefire reports (on failure)
-        if: failure()
+      - name: Upload test reports
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: surefire-reports
-          path: target/surefire-reports
+          name: test-reports
+          path: target/surefire-report
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-
-      - name: Docker metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ghcr.io/${{ github.repository }}
-          tags: |
-            type=sha
-            type=sha,format=short
 
       - name: Docker build (no push)
         uses: docker/build-push-action@v6
         with:
           context: .
           push: false
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          load: true
+          tags: ${{ env.REGISTRY_IMAGE }}:pr-${{ github.event.pull_request.number }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  # =========================
-  # 🟢 CI/CD - MAIN (release)
-  # =========================
-  ci-main:
-    name: Build, Test & Push (MAIN)
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/main')
-    runs-on: ubuntu-latest
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
-    permissions:
-      contents: read
-      packages: write
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-java@v4
-        with:
-          java-version: '21'
-          distribution: 'temurin'
-          cache: 'maven'
-
-      - name: Build and test
-        run: mvn clean verify
-
-      - name: Upload Surefire reports (on failure)
+      - name: Notify failure
         if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: surefire-reports
-          path: target/surefire-reports
+        uses: rtCamp/action-slack-notify@v2
+        env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+          SLACK_COLOR: '#ff0000'
+          SLACK_TITLE: '❌ PR Build Failed'
+          SLACK_MESSAGE: '${{ github.repository }} - PR #${{ github.event.pull_request.number }}'
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+    # =========================
+    #  CI - DEVELOP
+    # =========================
+    ci-develop:
+      name: Build & Push (DEV)
+      if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+      runs-on: ubuntu-latest
+      needs: [ security-scan ]
+      permissions:
+        contents: read
+        packages: write
+      steps:
+        - uses: actions/checkout@v4
 
-      - name: Login to GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+        - uses: actions/setup-java@v4
+          with:
+            java-version: '21'
+            distribution: 'temurin'
+            cache: 'maven'
 
-      - name: Docker metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ghcr.io/${{ github.repository }}
-          tags: |
-            type=sha
-            type=sha,format=short
-            type=raw,value=latest
+        - name: Build and test
+          run: mvn clean verify
 
-      - name: Build and push Docker
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+        - name: Set up Docker Buildx
+          uses: docker/setup-buildx-action@v3
 
-  release:
-    name: Build, Test & Push (TAG)
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
-    runs-on: ubuntu-latest
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+        - name: Login to GHCR
+          uses: docker/login-action@v3
+          with:
+            registry: ${{ env.REGISTRY }}
+            username: ${{ github.actor }}
+            password: ${{ secrets.GITHUB_TOKEN }}
 
-    permissions:
-      contents: read
-      packages: write
+        - name: Docker metadata
+          id: meta
+          uses: docker/metadata-action@v5
+          with:
+            images: ${{ env.REGISTRY_IMAGE }}
+            tags: |
+              type=sha,prefix=dev-
+              type=raw,value=dev-latest
 
-    steps:
-      - uses: actions/checkout@v4
+        - name: Build and push Docker
+          uses: docker/build-push-action@v6
+          with:
+            context: .
+            push: true
+            tags: ${{ steps.meta.outputs.tags }}
+            labels: ${{ steps.meta.outputs.labels }}
+            cache-from: type=gha
+            cache-to: type=gha,mode=max
 
-      - uses: actions/setup-java@v4
-        with:
-          java-version: '21'
-          distribution: 'temurin'
-          cache: 'maven'
+    # =========================
+    #  CI - MAIN (staging)
+    # =========================
+    ci-main:
+      name: Build & Push (STAGING)
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      runs-on: ubuntu-latest
+      needs: [ security-scan ]
+      permissions:
+        contents: read
+        packages: write
+      steps:
+        - uses: actions/checkout@v4
 
-      - name: Build and test
-        run: mvn clean verify
+        - uses: actions/setup-java@v4
+          with:
+            java-version: '21'
+            distribution: 'temurin'
+            cache: 'maven'
 
-      - name: Upload Surefire reports (on failure)
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: surefire-reports
-          path: target/surefire-reports
+        - name: Build and test
+          run: mvn clean verify
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        - name: Set up Docker Buildx
+          uses: docker/setup-buildx-action@v3
 
-      - name: Login to GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+        - name: Login to GHCR
+          uses: docker/login-action@v3
+          with:
+            registry: ${{ env.REGISTRY }}
+            username: ${{ github.actor }}
+            password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Docker metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ghcr.io/${{ github.repository }}
-          tags: |
-            type=sha
-            type=sha,format=short
-            type=ref,event=tag
+        - name: Docker metadata
+          id: meta
+          uses: docker/metadata-action@v5
+          with:
+            images: ${{ env.REGISTRY_IMAGE }}
+            tags: |
+              type=sha,prefix=staging-
+              type=raw,value=staging-latest
+              type=raw,value=latest
 
-      - name: Build and push Docker
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+        - name: Build and push Docker
+          uses: docker/build-push-action@v6
+          with:
+            context: .
+            push: true
+            tags: ${{ steps.meta.outputs.tags }}
+            labels: ${{ steps.meta.outputs.labels }}
+            cache-from: type=gha
+            cache-to: type=gha,mode=max
+
+    # =========================
+    # 🟣 CI - RELEASE
+    # =========================
+    release:
+      name: Build & Push (PROD)
+      if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+      runs-on: ubuntu-latest
+      needs: [ security-scan ]
+      permissions:
+        contents: read
+        packages: write
+        attestations: write
+      steps:
+        - uses: actions/checkout@v4
+
+        - uses: actions/setup-java@v4
+          with:
+            java-version: '21'
+            distribution: 'temurin'
+            cache: 'maven'
+
+        - name: Build and test
+          run: mvn clean verify
+
+        - name: Set up Docker Buildx
+          uses: docker/setup-buildx-action@v3
+
+        - name: Login to GHCR
+          uses: docker/login-action@v3
+          with:
+            registry: ${{ env.REGISTRY }}
+            username: ${{ github.actor }}
+            password: ${{ secrets.GITHUB_TOKEN }}
+
+        - name: Docker metadata
+          id: meta
+          uses: docker/metadata-action@v5
+          with:
+            images: ${{ env.REGISTRY_IMAGE }}
+            tags: |
+              type=semver,pattern={{version}}
+              type=semver,pattern={{major}}.{{minor}}
+              type=raw,value=stable
+
+        - name: Build and push Docker
+          uses: docker/build-push-action@v6
+          with:
+            context: .
+            push: true
+            tags: ${{ steps.meta.outputs.tags }}
+            labels: ${{ steps.meta.outputs.labels }}
+            cache-from: type=gha
+            cache-to: type=gha,mode=max
+            provenance: mode=max
+            sbom: true
+
+        - name: Generate artifact attestation
+          uses: actions/attest-build-provenance@v1
+          with:
+            subject-name: ${{ env.REGISTRY_IMAGE }}
+            subject-digest: ${{ steps.meta.outputs.digest }}
+
 
   gitops-update-dev:
     name: GitOps - Update Helm values (DEV)
