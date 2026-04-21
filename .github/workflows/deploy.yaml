@@ -226,6 +226,9 @@ jobs:
           VALUES_FILE="apps/authentification-service/values-dev.yaml"
           SHORT_SHA="${GITHUB_SHA::7}"
           sed -i "s/^  tag: .*/  tag: ${SHORT_SHA}/" "$VALUES_FILE"
+          
+          echo "✅ Tag mis à jour: ${SHORT_SHA}"
+          grep "tag:" "$VALUES_FILE"
           git status --porcelain
 
       - name: Commit and push
