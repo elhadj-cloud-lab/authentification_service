@@ -229,7 +229,7 @@ jobs:
 
       - name: Commit and push
         #if: ${{ secrets.GITOPS_REPO != '' && secrets.GITOPS_TOKEN != '' }}
-        if: ${{ vars.GITOPS_REPO != '' && secrets.GITOPS_TOKEN != '' }}
+        #if: ${{ vars.GITOPS_REPO != '' && secrets.GITOPS_TOKEN != '' }}
         run: |
           SHORT_SHA="${GITHUB_SHA::7}"
           git config user.name "github-actions"
