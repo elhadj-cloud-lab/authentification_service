@@ -262,7 +262,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - name: Skip GitOps update if secrets missing
+      - name: Checkout GitOps repo
         #if: ${{ secrets.GITOPS_REPO == '' || secrets.GITOPS_TOKEN == '' }}
 #        if: ${{ vars.GITOPS_REPO != '' && secrets.GITOPS_TOKEN != '' }}
 #        run: exit 0
@@ -297,6 +297,7 @@ jobs:
 
       - name: Commit and push
         run: |
+          cd gitops-repo
           SHORT_SHA="${GITHUB_SHA::7}"
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
