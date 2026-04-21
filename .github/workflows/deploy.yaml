@@ -236,7 +236,7 @@ jobs:
             exit 1
           fi
           
-          sed -i "s/^  tag: .*/  tag: ${SHORT_SHA}/" "$VALUES_FILE"
+          sed -i "s/  tag: .*/  tag: ${SHORT_SHA}/" "$VALUES_FILE
           
           echo "✅ Tag mis à jour: ${SHORT_SHA}"
           grep "tag:" "$VALUES_FILE"
@@ -291,7 +291,8 @@ jobs:
             exit 1
           fi
           
-          sed -i "s/^  tag: .*/  tag: ${SHORT_SHA}/" "$VALUES_FILE"
+          sed -i "s/  tag: .*/  tag: ${SHORT_SHA}/" "$VALUES_FILE"
+          
           echo "✅ Tag mis à jour: ${SHORT_SHA}"
           git status --porcelain
 
