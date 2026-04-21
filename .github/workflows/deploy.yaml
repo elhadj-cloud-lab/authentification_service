@@ -214,7 +214,7 @@ jobs:
 
       - name: Checkout GitOps repo
         #if: ${{ secrets.GITOPS_REPO != '' && secrets.GITOPS_TOKEN != '' }}
-        if: ${{ vars.GITOPS_REPO != '' && secrets.GITOPS_TOKEN != '' }}
+        #if: ${{ vars.GITOPS_REPO != '' && secrets.GITOPS_TOKEN != '' }}
         uses: actions/checkout@v4
         with:
           repository: ${{ secrets.GITOPS_REPO }}
