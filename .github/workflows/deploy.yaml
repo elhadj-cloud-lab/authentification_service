@@ -212,6 +212,7 @@ jobs:
         with:
           repository: ${{ vars.GITOPS_REPO }}
           token: ${{ secrets.GITOPS_TOKEN }}
+          path: gitops-repo
 
 #      - name: Checkout GitOps repo
 #        #if: ${{ secrets.GITOPS_REPO != '' && secrets.GITOPS_TOKEN != '' }}
@@ -223,6 +224,7 @@ jobs:
 
       - name: Update image tag
         run: |
+          cd gitops-repo
           VALUES_FILE="apps/authentification-service/values-dev.yaml"
           SHORT_SHA="${GITHUB_SHA::7}"
           
