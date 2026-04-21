@@ -5,7 +5,7 @@ on:
     branches: [ "develop" ]
 
   push:
-    branches: [ "develop" ]
+    branches: [ "main" ]
     tags: [ "v*" ]
 
 concurrency:
@@ -77,7 +77,7 @@ jobs:
   # =========================
   ci-main:
     name: Build, Test & Push (MAIN)
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/develop')
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/main')
     runs-on: ubuntu-latest
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -204,11 +204,13 @@ jobs:
       contents: read
     steps:
       - name: Skip GitOps update if secrets missing
-        if: ${{ secrets.GITOPS_REPO == '' || secrets.GITOPS_TOKEN == '' }}
+        #if: ${{ secrets.GITOPS_REPO == '' || secrets.GITOPS_TOKEN == '' }}
+        if: ${{ vars.GITOPS_REPO != '' && secrets.GITOPS_TOKEN != '' }}
         run: exit 0
 
       - name: Checkout GitOps repo
-        if: ${{ secrets.GITOPS_REPO != '' && secrets.GITOPS_TOKEN != '' }}
+        #if: ${{ secrets.GITOPS_REPO != '' && secrets.GITOPS_TOKEN != '' }}
+        if: ${{ vars.GITOPS_REPO != '' && secrets.GITOPS_TOKEN != '' }}
         uses: actions/checkout@v4
         with:
           repository: ${{ secrets.GITOPS_REPO }}
@@ -222,7 +224,8 @@ jobs:
           git status --porcelain
 
       - name: Commit and push
-        if: ${{ secrets.GITOPS_REPO != '' && secrets.GITOPS_TOKEN != '' }}
+        #if: ${{ secrets.GITOPS_REPO != '' && secrets.GITOPS_TOKEN != '' }}
+        if: ${{ vars.GITOPS_REPO != '' && secrets.GITOPS_TOKEN != '' }}
         run: |
           SHORT_SHA="${GITHUB_SHA::7}"
           git config user.name "github-actions"
@@ -240,11 +243,13 @@ jobs:
       contents: read
     steps:
       - name: Skip GitOps update if secrets missing
-        if: ${{ secrets.GITOPS_REPO == '' || secrets.GITOPS_TOKEN == '' }}
+        #if: ${{ secrets.GITOPS_REPO == '' || secrets.GITOPS_TOKEN == '' }}
+        if: ${{ vars.GITOPS_REPO != '' && secrets.GITOPS_TOKEN != '' }}
         run: exit 0
 
       - name: Checkout GitOps repo
-        if: ${{ secrets.GITOPS_REPO != '' && secrets.GITOPS_TOKEN != '' }}
+        #if: ${{ secrets.GITOPS_REPO != '' && secrets.GITOPS_TOKEN != '' }}
+        if: ${{ vars.GITOPS_REPO != '' && secrets.GITOPS_TOKEN != '' }}
         uses: actions/checkout@v4
         with:
           repository: ${{ secrets.GITOPS_REPO }}
