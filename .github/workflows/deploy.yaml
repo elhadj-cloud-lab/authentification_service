@@ -204,27 +204,36 @@ jobs:
     permissions:
       contents: read
     steps:
-#      - name: Checkout GitOps repo
+      - name: Checkout GitOps repo
 #        #if: ${{ secrets.GITOPS_REPO == '' || secrets.GITOPS_TOKEN == '' }}
 ##        if: ${{ vars.GITOPS_REPO != '' && secrets.GITOPS_TOKEN != '' }}
 ##        run: exit 0
-#        uses: actions/checkout@v4
-#        with:
-#          repository: ${{ vars.GITOPS_REPO }}
-#          token: ${{ secrets.GITOPS_TOKEN }}
-
-      - name: Checkout GitOps repo
-        #if: ${{ secrets.GITOPS_REPO != '' && secrets.GITOPS_TOKEN != '' }}
-        #if: ${{ vars.GITOPS_REPO != '' && secrets.GITOPS_TOKEN != '' }}
         uses: actions/checkout@v4
         with:
-          repository: ${{ secrets.GITOPS_REPO }}
+          repository: ${{ vars.GITOPS_REPO }}
           token: ${{ secrets.GITOPS_TOKEN }}
+
+#      - name: Checkout GitOps repo
+#        #if: ${{ secrets.GITOPS_REPO != '' && secrets.GITOPS_TOKEN != '' }}
+#        #if: ${{ vars.GITOPS_REPO != '' && secrets.GITOPS_TOKEN != '' }}
+#        uses: actions/checkout@v4
+#        with:
+#          repository: ${{ secrets.GITOPS_REPO }}
+#          token: ${{ secrets.GITOPS_TOKEN }}
 
       - name: Update image tag
         run: |
           VALUES_FILE="apps/authentification-service/values-dev.yaml"
           SHORT_SHA="${GITHUB_SHA::7}"
+          
+          # Vérifier que le fichier existe
+          if [ ! -f "$VALUES_FILE" ]; then
+            echo "❌ Fichier non trouvé: $VALUES_FILE"
+            echo "📁 Contenu du dépôt:"
+            ls -la apps/authentification-service/ || echo "   Dossier non trouvé"
+            exit 1
+          fi
+          
           sed -i "s/^  tag: .*/  tag: ${SHORT_SHA}/" "$VALUES_FILE"
           
           echo "✅ Tag mis à jour: ${SHORT_SHA}"
@@ -235,6 +244,7 @@ jobs:
         #if: ${{ secrets.GITOPS_REPO != '' && secrets.GITOPS_TOKEN != '' }}
         #if: ${{ vars.GITOPS_REPO != '' && secrets.GITOPS_TOKEN != '' }}
         run: |
+          cd gitops-repo
           SHORT_SHA="${GITHUB_SHA::7}"
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
@@ -259,19 +269,28 @@ jobs:
           repository: ${{ vars.GITOPS_REPO }}
           token: ${{ secrets.GITOPS_TOKEN }}
 
-      - name: Checkout GitOps repo
-        #if: ${{ secrets.GITOPS_REPO != '' && secrets.GITOPS_TOKEN != '' }}
-        #if: ${{ vars.GITOPS_REPO != '' && secrets.GITOPS_TOKEN != '' }}
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ secrets.GITOPS_REPO }}
-          token: ${{ secrets.GITOPS_TOKEN }}
+#      - name: Checkout GitOps repo
+#        #if: ${{ secrets.GITOPS_REPO != '' && secrets.GITOPS_TOKEN != '' }}
+#        #if: ${{ vars.GITOPS_REPO != '' && secrets.GITOPS_TOKEN != '' }}
+#        uses: actions/checkout@v4
+#        with:
+#          repository: ${{ secrets.GITOPS_REPO }}
+#          token: ${{ secrets.GITOPS_TOKEN }}
 
       - name: Update image tag
         run: |
+          cd gitops-repo
           VALUES_FILE="apps/authentification-service/values-prod.yaml"
           SHORT_SHA="${GITHUB_SHA::7}"
+          
+          if [ ! -f "$VALUES_FILE" ]; then
+            echo "❌ Fichier non trouvé: $VALUES_FILE"
+            ls -la apps/authentification-service/ || echo "   Dossier non trouvé"
+            exit 1
+          fi
+          
           sed -i "s/^  tag: .*/  tag: ${SHORT_SHA}/" "$VALUES_FILE"
+          echo "✅ Tag mis à jour: ${SHORT_SHA}"
           git status --porcelain
 
       - name: Commit and push
