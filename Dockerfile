@@ -12,13 +12,13 @@ WORKDIR /app
 COPY pom.xml .
 
 # Télécharger les dépendances Maven (optimisation du cache)
-RUN mvn -B -q -e -DskipTests dependency:go-offline
+RUN --mount=type=cache,target=/root/.m2 mvn -B -q -e -DskipTests dependency:go-offline
 
 # Copier le code source
 COPY src ./src
 
 # Compiler et packager l'application (sans lancer les tests)
-RUN mvn clean package -DskipTests
+RUN --mount=type=cache,target=/root/.m2 mvn clean package -DskipTests
 
 
 # -------------------------------

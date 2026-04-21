@@ -14,6 +14,10 @@ spring:
     host: localhost
     port: 9999
 
+jwt:
+  secret: test-secret
+  expiration: 86400000
+
 logging:
   level:
     org.springframework.boot.test: DEBUG

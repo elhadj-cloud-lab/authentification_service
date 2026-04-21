@@ -2,13 +2,15 @@ name: CI - Build & Push Docker
 
 on:
   pull_request:
-    branches: [ "main" ]
+    branches: [ "develop" ]
 
   push:
-    branches: [ "main" ]
+    branches: [ "main", "develop" ]
+    tags: [ "v*" ]
 
-# ⚠️ IMPORTANT : pas de permissions dynamiques ici
-# on les gère par job
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
 
@@ -29,31 +31,50 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Cache Maven
-        uses: actions/cache@v4
-        with:
-          path: ~/.m2
-          key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
-          restore-keys: ${{ runner.os }}-m2
-
       - uses: actions/setup-java@v4
         with:
           java-version: '21'
           distribution: 'temurin'
+          cache: 'maven'
 
       - name: Build and test
-        run: mvn clean verify -DskipTests
+        run: mvn clean verify
 
-      # 🔍 Test Docker SANS push (optionnel mais recommandé)
+      - name: Upload Surefire reports (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: surefire-reports
+          path: target/surefire-reports
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=sha
+            type=sha,format=short
+
       - name: Docker build (no push)
-        run: docker build -t test-image .
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
   # =========================
   # 🟢 CI/CD - MAIN (release)
   # =========================
   ci-main:
     name: Build, Test & Push (MAIN)
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/main')
     runs-on: ubuntu-latest
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -65,36 +86,194 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Cache Maven
-        uses: actions/cache@v4
+      - uses: actions/setup-java@v4
         with:
-          path: ~/.m2
-          key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
-          restore-keys: ${{ runner.os }}-m2
+          java-version: '21'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Build and test
+        run: mvn clean verify
+
+      - name: Upload Surefire reports (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: surefire-reports
+          path: target/surefire-reports
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=sha
+            type=sha,format=short
+            type=raw,value=latest
+
+      - name: Build and push Docker
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  release:
+    name: Build, Test & Push (TAG)
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
 
       - uses: actions/setup-java@v4
         with:
           java-version: '21'
           distribution: 'temurin'
+          cache: 'maven'
 
       - name: Build and test
-        run: mvn clean verify -DskipTests
+        run: mvn clean verify
 
-      # 🏷️ Extract short SHA for tagging
-      - name: Extract short SHA
-        run: echo "SHORT_SHA=${GITHUB_SHA::7}" >> $GITHUB_ENV
+      - name: Upload Surefire reports (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: surefire-reports
+          path: target/surefire-reports
 
-      # 🔐 Login GHCR
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Login to GHCR
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      # 🐳 Build & Push Docker image
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=sha
+            type=sha,format=short
+            type=ref,event=tag
+
       - name: Build and push Docker
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  gitops-update-dev:
+    name: GitOps - Update Helm values (DEV)
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/develop' }}
+    runs-on: ubuntu-latest
+    needs: []
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout GitOps repo
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ vars.GITOPS_REPO }}
+          token: ${{ secrets.GITOPS_TOKEN }}
+          path: gitops-repo
+
+      - name: Update image tag
         run: |
-          IMAGE_NAME=ghcr.io/${{ github.repository }}
+          cd gitops-repo
+          VALUES_FILE="apps/authentification-service/values-dev.yaml"
+          SHORT_SHA="${GITHUB_SHA::7}"
+          
+          # Vérifier que le fichier existe
+          if [ ! -f "$VALUES_FILE" ]; then
+            echo "❌ Fichier non trouvé: $VALUES_FILE"
+            echo "📁 Contenu du dépôt:"
+            ls -la apps/authentification-service/ || echo "   Dossier non trouvé"
+            exit 1
+          fi
+          
+          sed -i "s/  tag: .*/  tag: ${SHORT_SHA}/" "$VALUES_FILE"
+          
+          echo "✅ Tag mis à jour: ${SHORT_SHA}"
+          grep "tag:" "$VALUES_FILE"
+          git status --porcelain
 
-          docker build -t $IMAGE_NAME:${{ github.sha }} .
-          docker push $IMAGE_NAME:${{ github.sha }}
+      - name: Commit and push
+        run: |
+          cd gitops-repo
+          SHORT_SHA="${GITHUB_SHA::7}"
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add .
+          git commit -m "authentification-service: deploy ${SHORT_SHA}" || exit 0
+          git push
 
-          docker tag $IMAGE_NAME:${{ github.sha }} $IMAGE_NAME:${{ env.SHORT_SHA }}
-          docker push $IMAGE_NAME:${{ env.SHORT_SHA }}
+  gitops-update-prod:
+    name: GitOps - Update Helm values (PROD)
+    if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') }}
+    runs-on: ubuntu-latest
+    needs: [release]
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout GitOps repo
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ vars.GITOPS_REPO }}
+          token: ${{ secrets.GITOPS_TOKEN }}
+
+      - name: Update image tag
+        run: |
+          cd gitops-repo
+          VALUES_FILE="apps/authentification-service/values-prod.yaml"
+          SHORT_SHA="${GITHUB_SHA::7}"
+          
+          if [ ! -f "$VALUES_FILE" ]; then
+            echo "❌ Fichier non trouvé: $VALUES_FILE"
+            ls -la apps/authentification-service/ || echo "   Dossier non trouvé"
+            exit 1
+          fi
+          
+          sed -i "s/  tag: .*/  tag: ${SHORT_SHA}/" "$VALUES_FILE"
+          
+          echo "✅ Tag mis à jour: ${SHORT_SHA}"
+          git status --porcelain
+
+      - name: Commit and push
+        run: |
+          cd gitops-repo
+          SHORT_SHA="${GITHUB_SHA::7}"
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add .
+          git commit -m "authentification-service: deploy ${SHORT_SHA}" || exit 0
+          git push
