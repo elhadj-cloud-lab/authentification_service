@@ -5,7 +5,7 @@ on:
     branches: [ "develop" ]
 
   push:
-    branches: [ "main" ]
+    branches: [ "main", "develop" ]
     tags: [ "v*" ]
 
 concurrency:
@@ -205,8 +205,12 @@ jobs:
     steps:
       - name: Skip GitOps update if secrets missing
         #if: ${{ secrets.GITOPS_REPO == '' || secrets.GITOPS_TOKEN == '' }}
-        if: ${{ vars.GITOPS_REPO != '' && secrets.GITOPS_TOKEN != '' }}
-        run: exit 0
+#        if: ${{ vars.GITOPS_REPO != '' && secrets.GITOPS_TOKEN != '' }}
+#        run: exit 0
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ vars.GITOPS_REPO }}
+          token: ${{ secrets.GITOPS_TOKEN }}
 
       - name: Checkout GitOps repo
         #if: ${{ secrets.GITOPS_REPO != '' && secrets.GITOPS_TOKEN != '' }}
@@ -244,8 +248,12 @@ jobs:
     steps:
       - name: Skip GitOps update if secrets missing
         #if: ${{ secrets.GITOPS_REPO == '' || secrets.GITOPS_TOKEN == '' }}
-        if: ${{ vars.GITOPS_REPO != '' && secrets.GITOPS_TOKEN != '' }}
-        run: exit 0
+#        if: ${{ vars.GITOPS_REPO != '' && secrets.GITOPS_TOKEN != '' }}
+#        run: exit 0
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ vars.GITOPS_REPO }}
+          token: ${{ secrets.GITOPS_TOKEN }}
 
       - name: Checkout GitOps repo
         #if: ${{ secrets.GITOPS_REPO != '' && secrets.GITOPS_TOKEN != '' }}
