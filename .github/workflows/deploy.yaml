@@ -197,20 +197,21 @@ jobs:
 
   gitops-update-dev:
     name: GitOps - Update Helm values (DEV)
-    if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/heads/develop') }}
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/develop' }}
+    #if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/heads/develop') }}
     runs-on: ubuntu-latest
-    needs: [ci-main]
+    needs: []
     permissions:
       contents: read
     steps:
-      - name: Skip GitOps update if secrets missing
-        #if: ${{ secrets.GITOPS_REPO == '' || secrets.GITOPS_TOKEN == '' }}
-#        if: ${{ vars.GITOPS_REPO != '' && secrets.GITOPS_TOKEN != '' }}
-#        run: exit 0
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ vars.GITOPS_REPO }}
-          token: ${{ secrets.GITOPS_TOKEN }}
+#      - name: Checkout GitOps repo
+#        #if: ${{ secrets.GITOPS_REPO == '' || secrets.GITOPS_TOKEN == '' }}
+##        if: ${{ vars.GITOPS_REPO != '' && secrets.GITOPS_TOKEN != '' }}
+##        run: exit 0
+#        uses: actions/checkout@v4
+#        with:
+#          repository: ${{ vars.GITOPS_REPO }}
+#          token: ${{ secrets.GITOPS_TOKEN }}
 
       - name: Checkout GitOps repo
         #if: ${{ secrets.GITOPS_REPO != '' && secrets.GITOPS_TOKEN != '' }}
