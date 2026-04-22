@@ -1,18 +1,46 @@
-name: CI - Build & Push Docker
+name: CI/CD - Build & Deploy
 
 on:
   pull_request:
     branches: [ "develop" ]
-
   push:
-    branches: [ "main", "develop" ]
+    branches: [ "main" ]
     tags: [ "v*" ]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  REGISTRY: ghcr.io
+  REGISTRY_IMAGE: ${{ github.repository }}
+
 jobs:
+  # =========================
+  # 🔒 SECURITY SCAN
+  # =========================
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Trivy
+        uses: aquasecurity/setup-trivy@v0.2.1
+        with:
+          version: v0.59.1
+
+      - name: Run Trivy scan
+        run: |
+          trivy fs --format sarif --output trivy-results.sarif . || true
+
+      - name: Upload Trivy results
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-results.sarif'
 
   # =========================
   # 🟡 CI - Pull Request
@@ -21,13 +49,10 @@ jobs:
     name: Build & Test (PR)
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
+    needs: [security-scan]
     permissions:
       contents: read
       packages: read
-
     steps:
       - uses: actions/checkout@v4
 
@@ -40,49 +65,46 @@ jobs:
       - name: Build and test
         run: mvn clean verify
 
-      - name: Upload Surefire reports (on failure)
-        if: failure()
+      - name: Upload test reports
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: surefire-reports
+          name: test-reports
           path: target/surefire-reports
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-
-      - name: Docker metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ghcr.io/${{ github.repository }}
-          tags: |
-            type=sha
-            type=sha,format=short
 
       - name: Docker build (no push)
         uses: docker/build-push-action@v6
         with:
           context: .
           push: false
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          load: true
+          tags: ${{ env.REGISTRY_IMAGE }}:pr-${{ github.event.pull_request.number }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Notify failure
+        if: failure()
+        uses: rtCamp/action-slack-notify@v2
+        env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+          SLACK_COLOR: '#ff0000'
+          SLACK_TITLE: '❌ PR Build Failed'
+          SLACK_MESSAGE: '${{ github.repository }} - PR #${{ github.event.pull_request.number }}'
+
   # =========================
-  # 🟢 CI/CD - MAIN (release)
+  # 🔵 CI - MAIN (dev environment)
   # =========================
   ci-main:
-    name: Build, Test & Push (MAIN)
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/main')
+    name: Build & Push (DEV)
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
+    needs: [security-scan]
     permissions:
       contents: read
       packages: write
-
     steps:
       - uses: actions/checkout@v4
 
@@ -95,20 +117,13 @@ jobs:
       - name: Build and test
         run: mvn clean verify
 
-      - name: Upload Surefire reports (on failure)
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: surefire-reports
-          path: target/surefire-reports
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
       - name: Login to GHCR
         uses: docker/login-action@v3
         with:
-          registry: ghcr.io
+          registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
@@ -116,11 +131,10 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/${{ github.repository }}
+          images: ${{ env.REGISTRY_IMAGE }}
           tags: |
-            type=sha
-            type=sha,format=short
-            type=raw,value=latest
+            type=sha,prefix=dev-
+            type=raw,value=dev-latest
 
       - name: Build and push Docker
         uses: docker/build-push-action@v6
@@ -132,17 +146,18 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+  # =========================
+  # 🟣 CI - RELEASE (prod environment)
+  # =========================
   release:
-    name: Build, Test & Push (TAG)
+    name: Build & Push (PROD)
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
+    needs: [security-scan]
     permissions:
       contents: read
       packages: write
-
+      attestations: write
     steps:
       - uses: actions/checkout@v4
 
@@ -155,20 +170,13 @@ jobs:
       - name: Build and test
         run: mvn clean verify
 
-      - name: Upload Surefire reports (on failure)
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: surefire-reports
-          path: target/surefire-reports
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
       - name: Login to GHCR
         uses: docker/login-action@v3
         with:
-          registry: ghcr.io
+          registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
@@ -176,11 +184,11 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/${{ github.repository }}
+          images: ${{ env.REGISTRY_IMAGE }}
           tags: |
-            type=sha
-            type=sha,format=short
-            type=ref,event=tag
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=stable
 
       - name: Build and push Docker
         uses: docker/build-push-action@v6
@@ -191,59 +199,87 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          provenance: mode=max
+          sbom: true
 
+      - name: Generate artifact attestation
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-name: ${{ env.REGISTRY_IMAGE }}
+          subject-digest: ${{ steps.meta.outputs.digest }}
+
+  # =========================
+  # 🚀 GITOPS - DEV (sur push main)
+  # =========================
   gitops-update-dev:
-    name: GitOps - Update Helm values (DEV)
-    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/develop' }}
+    name: GitOps - Update DEV
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    needs: []
+    needs: [ ci-main ]
+    environment:
+      name: development
     permissions:
-      contents: read
+      contents: write
     steps:
       - name: Checkout GitOps repo
         uses: actions/checkout@v4
         with:
           repository: ${{ vars.GITOPS_REPO }}
           token: ${{ secrets.GITOPS_TOKEN }}
-          path: gitops-repo
+
+      - name: Set short SHA
+        run: echo "SHORT_SHA=${GITHUB_SHA::7}" >> $GITHUB_ENV
 
       - name: Update image tag
         run: |
-          cd gitops-repo
-          VALUES_FILE="apps/authentification-service/values-dev.yaml"
-          SHORT_SHA="${GITHUB_SHA::7}"
-          
-          # Vérifier que le fichier existe
+          VALUES_FILE="apps/${{ github.event.repository.name }}/values-dev.yaml"
+
           if [ ! -f "$VALUES_FILE" ]; then
             echo "❌ Fichier non trouvé: $VALUES_FILE"
-            echo "📁 Contenu du dépôt:"
-            ls -la apps/authentification-service/ || echo "   Dossier non trouvé"
             exit 1
           fi
-          
-          sed -i "s/  tag: .*/  tag: ${SHORT_SHA}/" "$VALUES_FILE"
-          
-          echo "✅ Tag mis à jour: ${SHORT_SHA}"
-          grep "tag:" "$VALUES_FILE"
-          git status --porcelain
+
+          sed -i "s/  tag: .*/  tag: dev-${{ env.SHORT_SHA }}/" "$VALUES_FILE"
+          echo "✅ Tag mis à jour: dev-${{ env.SHORT_SHA }}"
 
       - name: Commit and push
         run: |
-          cd gitops-repo
-          SHORT_SHA="${GITHUB_SHA::7}"
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
           git add .
-          git commit -m "authentification-service: deploy ${SHORT_SHA}" || exit 0
+          git diff --staged --quiet || git commit -m "deploy(dev): ${{ github.event.repository.name }} dev-${{ env.SHORT_SHA }}"
           git push
 
+      - name: Notify success
+        if: success()
+        uses: rtCamp/action-slack-notify@v2
+        env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+          SLACK_COLOR: '#00ff00'
+          SLACK_TITLE: '📦 DEV updated'
+          SLACK_MESSAGE: '${{ github.event.repository.name }} - dev-${{ env.SHORT_SHA }}'
+
+      - name: Notify failure
+        if: failure()
+        uses: rtCamp/action-slack-notify@v2
+        env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+          SLACK_COLOR: '#ff0000'
+          SLACK_TITLE: '❌ DEV update failed'
+          SLACK_MESSAGE: '${{ github.event.repository.name }} - ${{ github.ref_name }}'
+
+  # =========================
+  # 🚀 GITOPS - PROD (sur tag v*)
+  # =========================
   gitops-update-prod:
-    name: GitOps - Update Helm values (PROD)
-    if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') }}
+    name: GitOps - Update PROD
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
-    needs: [release]
+    needs: [ release ]
+    environment:
+      name: production
     permissions:
-      contents: read
+      contents: write
     steps:
       - name: Checkout GitOps repo
         uses: actions/checkout@v4
@@ -251,29 +287,48 @@ jobs:
           repository: ${{ vars.GITOPS_REPO }}
           token: ${{ secrets.GITOPS_TOKEN }}
 
+      - name: Set tag name
+        run: echo "TAG_NAME=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
+
       - name: Update image tag
         run: |
-          cd gitops-repo
-          VALUES_FILE="apps/authentification-service/values-prod.yaml"
-          SHORT_SHA="${GITHUB_SHA::7}"
-          
+          VALUES_FILE="apps/${{ github.event.repository.name }}/values-prod.yaml"
+
           if [ ! -f "$VALUES_FILE" ]; then
             echo "❌ Fichier non trouvé: $VALUES_FILE"
-            ls -la apps/authentification-service/ || echo "   Dossier non trouvé"
             exit 1
           fi
-          
-          sed -i "s/  tag: .*/  tag: ${SHORT_SHA}/" "$VALUES_FILE"
-          
-          echo "✅ Tag mis à jour: ${SHORT_SHA}"
-          git status --porcelain
+
+          sed -i "s/  tag: .*/  tag: ${{ env.TAG_NAME }}/" "$VALUES_FILE"
+          echo "✅ Tag mis à jour: ${{ env.TAG_NAME }}"
 
       - name: Commit and push
         run: |
-          cd gitops-repo
-          SHORT_SHA="${GITHUB_SHA::7}"
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
           git add .
-          git commit -m "authentification-service: deploy ${SHORT_SHA}" || exit 0
+          git diff --staged --quiet || git commit -m "release(prod): ${{ github.event.repository.name }} ${{ env.TAG_NAME }}"
           git push
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          generate_release_notes: true
+
+      - name: Notify success
+        if: success()
+        uses: rtCamp/action-slack-notify@v2
+        env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+          SLACK_COLOR: '#00ff00'
+          SLACK_TITLE: '🚀 PROD deployed'
+          SLACK_MESSAGE: '${{ github.event.repository.name }} - ${{ env.TAG_NAME }}'
+
+      - name: Notify failure
+        if: failure()
+        uses: rtCamp/action-slack-notify@v2
+        env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+          SLACK_COLOR: '#ff0000'
+          SLACK_TITLE: '💥 PROD deployment failed'
+          SLACK_MESSAGE: '${{ github.event.repository.name }} - ${{ github.ref_name }}'
