@@ -31,14 +31,14 @@ jobs:
 
       - name: Install Trivy
         run: |
-          wget https://github.com/aquasecurity/trivy/releases/download/v0.62.0/trivy_0.62.0_Linux-64bit.deb
-          sudo dpkg -i trivy_0.59.1_Linux-64bit.deb
+          wget https://github.com/aquasecurity/trivy/releases/download/v0.70.0/trivy_0.70.0_Linux-64bit.deb
+          sudo dpkg -i trivy_0.70.0_Linux-64bit.deb
           trivy --version
 
       - name: Run Trivy scan
         run: |
           trivy fs --format sarif --output trivy-results.sarif . || true
-          ls -la trivy-results.sarif  # Vérifier que le fichier existe
+          ls -la trivy-results.sarif
 
       - name: Upload Trivy results
         uses: github/codeql-action/upload-sarif@v3
