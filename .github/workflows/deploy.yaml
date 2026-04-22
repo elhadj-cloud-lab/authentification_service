@@ -218,19 +218,17 @@ jobs:
     needs: [ci-main]
     environment:
       name: development
-    env:
-      GITOPS_TOKEN: ${{ secrets.GITOPS_TOKEN }}
     permissions:
       contents: write
     steps:
       - name: Skip GitOps update if config missing
-        if: ${{ vars.GITOPS_REPO == '' || env.GITOPS_TOKEN == '' }}
+        if: ${{ vars.GITOPS_REPO == '' || secrets.GITOPS_TOKEN == '' }}
         run: |
           echo "Skipping GitOps DEV update: missing vars.GITOPS_REPO and/or secrets.GITOPS_TOKEN"
           exit 0
 
       - name: Checkout GitOps repo
-        if: ${{ vars.GITOPS_REPO != '' && env.GITOPS_TOKEN != '' }}
+        if: ${{ vars.GITOPS_REPO != '' && secrets.GITOPS_TOKEN != '' }}
         uses: actions/checkout@v4
         with:
           repository: ${{ vars.GITOPS_REPO }}
@@ -238,11 +236,11 @@ jobs:
           path: gitops-repo
 
       - name: Set short SHA
-        if: ${{ vars.GITOPS_REPO != '' && env.GITOPS_TOKEN != '' }}
+        if: ${{ vars.GITOPS_REPO != '' && secrets.GITOPS_TOKEN != '' }}
         run: echo "SHORT_SHA=${GITHUB_SHA::7}" >> $GITHUB_ENV
 
       - name: Update image tag
-        if: ${{ vars.GITOPS_REPO != '' && env.GITOPS_TOKEN != '' }}
+        if: ${{ vars.GITOPS_REPO != '' && secrets.GITOPS_TOKEN != '' }}
         run: |
           cd gitops-repo
           VALUES_FILE="apps/${{ github.event.repository.name }}/values-dev.yaml"
@@ -256,7 +254,7 @@ jobs:
           echo "✅ Tag mis à jour: dev-${{ env.SHORT_SHA }}"
 
       - name: Commit and push
-        if: ${{ vars.GITOPS_REPO != '' && env.GITOPS_TOKEN != '' }}
+        if: ${{ vars.GITOPS_REPO != '' && secrets.GITOPS_TOKEN != '' }}
         run: |
           cd gitops-repo
           git config user.name "github-actions"
@@ -266,7 +264,7 @@ jobs:
           git push
 
       - name: Notify success
-        if: ${{ success() && vars.GITOPS_REPO != '' && env.GITOPS_TOKEN != '' }}
+        if: ${{ success() && vars.GITOPS_REPO != '' && secrets.GITOPS_TOKEN != '' }}
         uses: rtCamp/action-slack-notify@v2
         env:
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
@@ -275,7 +273,7 @@ jobs:
           SLACK_MESSAGE: '${{ github.event.repository.name }} - dev-${{ env.SHORT_SHA }}'
 
       - name: Notify failure
-        if: ${{ failure() && vars.GITOPS_REPO != '' && env.GITOPS_TOKEN != '' }}
+        if: ${{ failure() && vars.GITOPS_REPO != '' && secrets.GITOPS_TOKEN != '' }}
         uses: rtCamp/action-slack-notify@v2
         env:
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
@@ -293,19 +291,17 @@ jobs:
     needs: [release]
     environment:
       name: production
-    env:
-      GITOPS_TOKEN: ${{ secrets.GITOPS_TOKEN }}
     permissions:
       contents: write
     steps:
       - name: Skip GitOps update if config missing
-        if: ${{ vars.GITOPS_REPO == '' || env.GITOPS_TOKEN == '' }}
+        if: ${{ vars.GITOPS_REPO == '' || secrets.GITOPS_TOKEN == '' }}
         run: |
           echo "Skipping GitOps PROD update: missing vars.GITOPS_REPO and/or secrets.GITOPS_TOKEN"
           exit 0
 
       - name: Checkout GitOps repo
-        if: ${{ vars.GITOPS_REPO != '' && env.GITOPS_TOKEN != '' }}
+        if: ${{ vars.GITOPS_REPO != '' && secrets.GITOPS_TOKEN != '' }}
         uses: actions/checkout@v4
         with:
           repository: ${{ vars.GITOPS_REPO }}
@@ -313,11 +309,11 @@ jobs:
           path: gitops-repo
 
       - name: Set tag name
-        if: ${{ vars.GITOPS_REPO != '' && env.GITOPS_TOKEN != '' }}
+        if: ${{ vars.GITOPS_REPO != '' && secrets.GITOPS_TOKEN != '' }}
         run: echo "TAG_NAME=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
 
       - name: Update image tag
-        if: ${{ vars.GITOPS_REPO != '' && env.GITOPS_TOKEN != '' }}
+        if: ${{ vars.GITOPS_REPO != '' && secrets.GITOPS_TOKEN != '' }}
         run: |
           cd gitops-repo
           VALUES_FILE="apps/${{ github.event.repository.name }}/values-prod.yaml"
@@ -331,7 +327,7 @@ jobs:
           echo "✅ Tag mis à jour: ${{ env.TAG_NAME }}"
 
       - name: Commit and push
-        if: ${{ vars.GITOPS_REPO != '' && env.GITOPS_TOKEN != '' }}
+        if: ${{ vars.GITOPS_REPO != '' && secrets.GITOPS_TOKEN != '' }}
         run: |
           cd gitops-repo
           git config user.name "github-actions"
@@ -341,13 +337,13 @@ jobs:
           git push
 
       - name: Create GitHub Release
-        if: ${{ vars.GITOPS_REPO != '' && env.GITOPS_TOKEN != '' }}
+        if: ${{ vars.GITOPS_REPO != '' && secrets.GITOPS_TOKEN != '' }}
         uses: softprops/action-gh-release@v1
         with:
           generate_release_notes: true
 
       - name: Notify success
-        if: ${{ success() && vars.GITOPS_REPO != '' && env.GITOPS_TOKEN != '' }}
+        if: ${{ success() && vars.GITOPS_REPO != '' && secrets.GITOPS_TOKEN != '' }}
         uses: rtCamp/action-slack-notify@v2
         env:
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
@@ -356,7 +352,7 @@ jobs:
           SLACK_MESSAGE: '${{ github.event.repository.name }} - ${{ env.TAG_NAME }}'
 
       - name: Notify failure
-        if: ${{ failure() && vars.GITOPS_REPO != '' && env.GITOPS_TOKEN != '' }}
+        if: ${{ failure() && vars.GITOPS_REPO != '' && secrets.GITOPS_TOKEN != '' }}
         uses: rtCamp/action-slack-notify@v2
         env:
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
