@@ -17,9 +17,9 @@ env:
   REGISTRY_IMAGE: ${{ github.repository }}
 
 jobs:
-  # =========================
-  # 🔒 SECURITY SCAN
-  # =========================
+# =========================
+# 🔒 SECURITY SCAN
+# =========================
   security-scan:
     name: Security Scan
     runs-on: ubuntu-latest
@@ -28,14 +28,16 @@ jobs:
       security-events: write
     steps:
       - uses: actions/checkout@v4
+
+      - name: Install Trivy
+        run: |
+          wget https://github.com/aquasecurity/trivy/releases/download/v0.59.1/trivy_0.59.1_Linux-64bit.deb
+          sudo dpkg -i trivy_0.59.1_Linux-64bit.deb
+          trivy --version
+
       - name: Run Trivy scan
-        uses: aquasecurity/trivy-action@v0.29.0
-        with:
-          scan-type: fs
-          scan-ref: .
-          format: sarif
-          output: trivy-results.sarif
-          exit-code: 0
+        run: |
+          trivy fs --format sarif --output trivy-results.sarif . || true
 
       - name: Upload Trivy results
         uses: github/codeql-action/upload-sarif@v3
