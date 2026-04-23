@@ -299,7 +299,6 @@ jobs:
 
       - name: Update image tag
         run: |
-          cd gitops-repo
           VALUES_FILE="apps/${{ github.event.repository.name }}/values-prod.yaml"
 
           if [ ! -f "$VALUES_FILE" ]; then
