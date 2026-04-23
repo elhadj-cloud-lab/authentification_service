@@ -7,7 +7,7 @@ on:
     branches:
       - "main"      # ← DEV (automatique)
       - "prod"      # ← PROD (manuel via merge)
-    tags: [ "v*" ]  # ← Gardé au cas où
+    tags: [ "v*" ]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
