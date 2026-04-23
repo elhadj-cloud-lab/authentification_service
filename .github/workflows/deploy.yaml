@@ -8,8 +8,6 @@ on:
     branches:
       - "main"      # ← DEV (automatique)
       - "prod"      # ← PROD (manuel via merge)
-    tags: [ "v*" ]
-
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -21,7 +19,7 @@ env:
 
 jobs:
   # =========================
-  # 🔒 SECURITY SCAN
+  #  SECURITY SCAN
   # =========================
   security-scan:
     name: Security Scan
@@ -31,25 +29,22 @@ jobs:
       security-events: write
     steps:
       - uses: actions/checkout@v4
-
       - name: Install Trivy
         run: |
           wget https://github.com/aquasecurity/trivy/releases/download/v0.70.0/trivy_0.70.0_Linux-64bit.deb
           sudo dpkg -i trivy_0.70.0_Linux-64bit.deb
           trivy --version
-
       - name: Run Trivy scan
         run: |
           trivy fs --format sarif --output trivy-results.sarif . || true
           ls -la trivy-results.sarif
-
       - name: Upload Trivy results
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: 'trivy-results.sarif'
 
   # =========================
-  # 🟡 CI - Pull Request
+  # CI - Pull Request
   # =========================
   ci-pr:
     name: Build & Test (PR)
@@ -61,26 +56,21 @@ jobs:
       packages: read
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-java@v4
         with:
           java-version: '21'
           distribution: 'temurin'
           cache: 'maven'
-
       - name: Build and test
         run: mvn clean verify
-
       - name: Upload test reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: test-reports
           path: target/surefire-reports
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-
       - name: Docker build (no push)
         uses: docker/build-push-action@v6
         with:
@@ -90,18 +80,17 @@ jobs:
           tags: ${{ env.REGISTRY_IMAGE }}:pr-${{ github.event.pull_request.number }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-
       - name: Notify failure
         if: failure()
         uses: rtCamp/action-slack-notify@v2
         env:
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
           SLACK_COLOR: '#ff0000'
-          SLACK_TITLE: '❌ PR Build Failed'
+          SLACK_TITLE: 'PR Build Failed'
           SLACK_MESSAGE: '${{ github.repository }} - PR #${{ github.event.pull_request.number }}'
 
   # =========================
-  # 🔵 CI - DEV (push sur main)
+  #  CI - DEV (push sur main)
   # =========================
   ci-dev:
     name: Build & Push (DEV)
@@ -113,26 +102,21 @@ jobs:
       packages: write
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-java@v4
         with:
           java-version: '21'
           distribution: 'temurin'
           cache: 'maven'
-
       - name: Build and test
         run: mvn clean verify
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-
       - name: Login to GHCR
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Docker metadata
         id: meta
         uses: docker/metadata-action@v5
@@ -141,7 +125,6 @@ jobs:
           tags: |
             type=sha,prefix=dev-
             type=raw,value=dev-latest
-
       - name: Build and push Docker
         uses: docker/build-push-action@v6
         with:
@@ -153,7 +136,7 @@ jobs:
           cache-to: type=gha,mode=max
 
   # =========================
-  # 🟣 CI - PROD (push sur prod)
+  #  CI - PROD (push sur prod)
   # =========================
   ci-prod:
     name: Build & Push (PROD)
@@ -167,19 +150,15 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-java@v4
         with:
           java-version: '21'
           distribution: 'temurin'
           cache: 'maven'
-
       - name: Build and test
         run: mvn clean verify
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-
       - name: Login to GHCR
         uses: docker/login-action@v3
         with:
@@ -212,21 +191,17 @@ jobs:
       - name: Generate artifact attestation
         uses: actions/attest-build-provenance@v1
         with:
-#          subject-name: ${{ env.REGISTRY_IMAGE }}
-#          subject-digest: ${{ steps.meta.outputs.digest }}
           subject-name: ghcr.io/${{ github.repository }}
           subject-digest: ${{ steps.push.outputs.digest }}
 
   # =========================
-  # 🚀 GITOPS - DEV
+  #  GITOPS - DEV
   # =========================
   gitops-update-dev:
     name: GitOps - Update DEV
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     needs: [ ci-dev ]
-#    environment:
-#      name: development
     permissions:
       contents: write
     steps:
@@ -235,22 +210,19 @@ jobs:
         with:
           repository: ${{ vars.GITOPS_REPO }}
           token: ${{ secrets.GITOPS_TOKEN }}
-
       - name: Set short SHA
         run: echo "SHORT_SHA=${GITHUB_SHA::7}" >> $GITHUB_ENV
-
       - name: Update image tag
         run: |
           VALUES_FILE="apps/${{ github.event.repository.name }}/values-dev.yaml"
 
           if [ ! -f "$VALUES_FILE" ]; then
-            echo "❌ Fichier non trouvé: $VALUES_FILE"
+            echo "Fichier non trouvé: $VALUES_FILE"
             exit 1
           fi
 
           sed -i "s/  tag: .*/  tag: dev-${{ env.SHORT_SHA }}/" "$VALUES_FILE"
-          echo "✅ Tag mis à jour: dev-${{ env.SHORT_SHA }}"
-
+          echo "Tag mis à jour: dev-${{ env.SHORT_SHA }}"
       - name: Commit and push
         run: |
           git config user.name "github-actions"
@@ -265,20 +237,19 @@ jobs:
         env:
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
           SLACK_COLOR: '#00ff00'
-          SLACK_TITLE: '📦 DEV updated'
+          SLACK_TITLE: 'DEV updated'
           SLACK_MESSAGE: '${{ github.event.repository.name }} - dev-${{ env.SHORT_SHA }}'
-
       - name: Notify failure
         if: failure()
         uses: rtCamp/action-slack-notify@v2
         env:
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
           SLACK_COLOR: '#ff0000'
-          SLACK_TITLE: '❌ DEV update failed'
+          SLACK_TITLE: 'DEV update failed'
           SLACK_MESSAGE: '${{ github.event.repository.name }} - ${{ github.ref_name }}'
 
   # =========================
-  # 🚀 GITOPS - PROD
+  #  GITOPS - PROD
   # =========================
   gitops-update-prod:
     name: GitOps - Update PROD
@@ -293,21 +264,19 @@ jobs:
         with:
           repository: ${{ vars.GITOPS_REPO }}
           token: ${{ secrets.GITOPS_TOKEN }}
-
       - name: Set short SHA
         run: echo "SHORT_SHA=${GITHUB_SHA::7}" >> $GITHUB_ENV
-
       - name: Update image tag
         run: |
           VALUES_FILE="apps/${{ github.event.repository.name }}/values-prod.yaml"
 
           if [ ! -f "$VALUES_FILE" ]; then
-            echo "❌ Fichier non trouvé: $VALUES_FILE"
+            echo "Fichier non trouvé: $VALUES_FILE"
             exit 1
           fi
 
           sed -i "s/  tag: .*/  tag: ${{ env.SHORT_SHA }}/" "$VALUES_FILE"
-          echo "✅ Tag mis à jour: ${{ env.SHORT_SHA }}"
+          echo "Tag mis à jour: ${{ env.SHORT_SHA }}"
       - name: Commit and push
         run: |
           git config user.name "github-actions"
@@ -322,14 +291,13 @@ jobs:
         env:
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
           SLACK_COLOR: '#00ff00'
-          SLACK_TITLE: '🚀 PROD deployed'
+          SLACK_TITLE: 'PROD deployed'
           SLACK_MESSAGE: '${{ github.event.repository.name }} - ${{ env.TAG_NAME }}'
-
       - name: Notify failure
         if: failure()
         uses: rtCamp/action-slack-notify@v2
         env:
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
           SLACK_COLOR: '#ff0000'
-          SLACK_TITLE: '💥 PROD deployment failed'
+          SLACK_TITLE: 'PROD deployment failed'
           SLACK_MESSAGE: '${{ github.event.repository.name }} - ${{ github.ref_name }}'
