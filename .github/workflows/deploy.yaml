@@ -2,9 +2,12 @@ name: CI/CD - Build & Deploy
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     branches: [ "develop" ]
   push:
-    branches: [ "main" ]
+    branches:
+      - "main"      # ← DEV (automatique)
+      - "prod"      # ← PROD (manuel via merge)
     tags: [ "v*" ]
 
 concurrency:
@@ -98,9 +101,9 @@ jobs:
           SLACK_MESSAGE: '${{ github.repository }} - PR #${{ github.event.pull_request.number }}'
 
   # =========================
-  # 🔵 CI - MAIN (dev environment)
+  # 🔵 CI - DEV (push sur main)
   # =========================
-  ci-main:
+  ci-dev:
     name: Build & Push (DEV)
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
@@ -123,7 +126,7 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Login to GitHub Container Registry
+      - name: Login to GHCR
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -150,11 +153,11 @@ jobs:
           cache-to: type=gha,mode=max
 
   # =========================
-  # 🟣 CI - RELEASE (prod environment)
+  # 🟣 CI - PROD (push sur prod)
   # =========================
-  release:
+  ci-prod:
     name: Build & Push (PROD)
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    if: github.event_name == 'push' && github.ref == 'refs/heads/prod'
     runs-on: ubuntu-latest
     needs: [security-scan]
     permissions:
@@ -179,7 +182,7 @@ jobs:
       - name: Login to GHCR
         uses: docker/login-action@v3
         with:
-          registry: ${{ env.REGISTRY }}
+          registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
@@ -189,9 +192,8 @@ jobs:
         with:
           images: ${{ env.REGISTRY_IMAGE }}
           tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=stable
+            type=raw,value=prod-latest
+            type=sha,prefix=prod-
 
       - name: Build and push Docker
         uses: docker/build-push-action@v6
@@ -212,15 +214,15 @@ jobs:
           subject-digest: ${{ steps.meta.outputs.digest }}
 
   # =========================
-  # 🚀 GITOPS - DEV (sur push main)
+  # 🚀 GITOPS - DEV
   # =========================
   gitops-update-dev:
     name: GitOps - Update DEV
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    needs: [ ci-main ]
-    environment:
-      name: development
+    needs: [ ci-dev ]
+#    environment:
+#      name: development
     permissions:
       contents: write
     steps:
@@ -235,6 +237,7 @@ jobs:
 
       - name: Update image tag
         run: |
+          cd gitops-rep
           VALUES_FILE="apps/${{ github.event.repository.name }}/values-dev.yaml"
 
           if [ ! -f "$VALUES_FILE" ]; then
@@ -272,15 +275,13 @@ jobs:
           SLACK_MESSAGE: '${{ github.event.repository.name }} - ${{ github.ref_name }}'
 
   # =========================
-  # 🚀 GITOPS - PROD (sur tag v*)
+  # 🚀 GITOPS - PROD
   # =========================
   gitops-update-prod:
     name: GitOps - Update PROD
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    if: github.event_name == 'push' && github.ref == 'refs/heads/prod'
     runs-on: ubuntu-latest
-    needs: [ release ]
-    environment:
-      name: production
+    needs: [ ci-prod ]
     permissions:
       contents: write
     steps:
@@ -290,11 +291,12 @@ jobs:
           repository: ${{ vars.GITOPS_REPO }}
           token: ${{ secrets.GITOPS_TOKEN }}
 
-      - name: Set tag name
-        run: echo "TAG_NAME=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
+      - name: Set short SHA
+        run: echo "SHORT_SHA=${GITHUB_SHA::7}" >> $GITHUB_ENV
 
       - name: Update image tag
         run: |
+          cd gitops-repo
           VALUES_FILE="apps/${{ github.event.repository.name }}/values-prod.yaml"
 
           if [ ! -f "$VALUES_FILE" ]; then
@@ -302,21 +304,17 @@ jobs:
             exit 1
           fi
 
-          sed -i "s/  tag: .*/  tag: ${{ env.TAG_NAME }}/" "$VALUES_FILE"
-          echo "✅ Tag mis à jour: ${{ env.TAG_NAME }}"
+          sed -i "s/  tag: .*/  tag: ${{ env.SHORT_SHA }}/" "$VALUES_FILE"
+          echo "✅ Tag mis à jour: ${{ env.SHORT_SHA }}"
 
       - name: Commit and push
         run: |
+          cd gitops-repo
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
           git add .
-          git diff --staged --quiet || git commit -m "release(prod): ${{ github.event.repository.name }} ${{ env.TAG_NAME }}"
+          git diff --staged --quiet || git commit -m "deploy(prod): ${{ github.event.repository.name }} prod-${{ env.SHORT_SHA }}"
           git push
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
-        with:
-          generate_release_notes: true
 
       - name: Notify success
         if: success()
