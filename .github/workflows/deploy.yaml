@@ -210,10 +210,12 @@ jobs:
         with:
           repository: ${{ vars.GITOPS_REPO }}
           token: ${{ secrets.GITOPS_TOKEN }}
+          path: gitops-repo
       - name: Set short SHA
         run: echo "SHORT_SHA=${GITHUB_SHA::7}" >> $GITHUB_ENV
       - name: Update image tag
         run: |
+          cd gitops-repo
           VALUES_FILE="apps/${{ github.event.repository.name }}/values-dev.yaml"
 
           if [ ! -f "$VALUES_FILE" ]; then
@@ -225,6 +227,7 @@ jobs:
           echo "Tag mis à jour: dev-${{ env.SHORT_SHA }}"
       - name: Commit and push
         run: |
+          cd gitops-repo
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
           git add .
@@ -264,10 +267,12 @@ jobs:
         with:
           repository: ${{ vars.GITOPS_REPO }}
           token: ${{ secrets.GITOPS_TOKEN }}
+          path: gitops-repo
       - name: Set short SHA
         run: echo "SHORT_SHA=${GITHUB_SHA::7}" >> $GITHUB_ENV
       - name: Update image tag
         run: |
+          cd gitops-repo
           VALUES_FILE="apps/${{ github.event.repository.name }}/values-prod.yaml"
 
           if [ ! -f "$VALUES_FILE" ]; then
@@ -275,10 +280,11 @@ jobs:
             exit 1
           fi
 
-          sed -i "s/  tag: .*/  tag: ${{ env.SHORT_SHA }}/" "$VALUES_FILE"
-          echo "Tag mis à jour: ${{ env.SHORT_SHA }}"
+          sed -i "s/  tag: .*/  tag: prod-${{ env.SHORT_SHA }}/" "$VALUES_FILE"
+          echo "Tag mis à jour: prod-${{ env.SHORT_SHA }}"
       - name: Commit and push
         run: |
+          cd gitops-repo
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
           git add .
@@ -292,7 +298,7 @@ jobs:
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
           SLACK_COLOR: '#00ff00'
           SLACK_TITLE: 'PROD deployed'
-          SLACK_MESSAGE: '${{ github.event.repository.name }} - ${{ env.TAG_NAME }}'
+          SLACK_MESSAGE: '${{ github.event.repository.name }} - prod-${{ env.SHORT_SHA }}'
       - name: Notify failure
         if: failure()
         uses: rtCamp/action-slack-notify@v2
