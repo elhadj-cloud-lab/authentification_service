@@ -23,14 +23,14 @@ spring:
   application:
     name: authentification-service
   datasource:
-    url: ${SPRING_DATASOURCE_URL_USER}
+    url: ${SPRING_DATASOURCE_URL}
     username: ${SPRING_DATASOURCE_USERNAME}
     password: ${SPRING_DATASOURCE_PASSWORD}
 
   jpa:
     database-platform: org.hibernate.dialect.PostgreSQLDialect
     hibernate:
-      ddl-auto: validate
+      ddl-auto: update
       jdbc:
         batch_size: 20
     show-sql: false
