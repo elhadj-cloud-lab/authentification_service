@@ -16,6 +16,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 
+import javax.management.relation.RoleNotFoundException;
 import java.util.*;
 
 @Transactional
@@ -76,16 +77,15 @@ public class UserServiceImpl implements UserService {
         MyUser newUser = new MyUser();
         newUser.setUsername(request.getUsername());
         newUser.setEmail(request.getEmail());
-
         newUser.setPassword( bCryptPasswordEncoder.encode( request.getPassword() )  );
         newUser.setEnabled(false);
-
-        userRepository.save(newUser);
 
         Role r = roleRepository.findByRole("USER");
         List<Role> roles = new ArrayList<>();
         roles.add(r);
         newUser.setRoles(roles);
+
+        MyUser savedUser = userRepository.save(newUser);
 
         //génére le code secret
         String code = this.generateCode();
@@ -96,8 +96,7 @@ public class UserServiceImpl implements UserService {
         //envoyer le code par email à l'utilisateur
         sendEmailUser(newUser,token.getToken());
 
-
-        return userRepository.save(newUser);
+        return savedUser;
     }
 
     private String generateCode() {
