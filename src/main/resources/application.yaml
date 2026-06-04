@@ -2,12 +2,19 @@ server:
   port: 8080
   servlet:
     context-path: /users
+
 management:
   endpoints:
     web:
       exposure:
         include: health,info
         #include: health,info,metrics
+      base-path: /actuator
+  endpoint:
+    health:
+      show-details: always
+      probes:
+        enabled: true
   health:
     db:
       enabled: true
@@ -18,13 +25,16 @@ jwt:
   refresh-expiration: 604800000
 
 spring:
+  logging:
+    level:
+      org.springframework.security: DEBUG
+      org.springframework.web: DEBUG
   application:
     name: authentification-service
   datasource:
     url: ${SPRING_DATASOURCE_URL}
     username: ${SPRING_DATASOURCE_USERNAME}
     password: ${SPRING_DATASOURCE_PASSWORD}
-
   jpa:
     database-platform: org.hibernate.dialect.PostgreSQLDialect
     hibernate:
@@ -32,13 +42,9 @@ spring:
       jdbc:
         batch_size: 20
     show-sql: false
-    # open-in-view: false
   flyway:
     enabled: true
     baseline-on-migrate: true
-
-#  main:
-#    allow-circular-references: true
   mail:
     default-encoding: UTF-8
     host: smtp.gmail.com
@@ -51,25 +57,8 @@ spring:
           auth: true
           starttls:
             enable: true
-
-  management:
-    endpoints:
-      web:
-        exposure:
-          include: health,info
-        base-path: /actuator
-    endpoint:
-      health:
-        show-details: always
-        probes:
-          enabled: true
-    health:
-      db:
-        enabled: true
-
-  # cette section désactive la sécurité sur l'actuator
-  spring:
-    security:
-      web:
-        ignored:
-          - /actuator/**
+  security:
+    enabled: true
+    web:
+      ignored:
+        - /users/actuator/**
