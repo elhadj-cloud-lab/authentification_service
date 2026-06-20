@@ -1,8 +1,8 @@
 package com.bestech.authentification_service.security;
 
-import com.auth0.jwt.JWT;
-import com.auth0.jwt.algorithms.Algorithm;
 import com.bestech.authentification_service.model.MyUser;
+import com.bestech.authentification_service.service.refreshtoken.RefreshToken;
+import com.bestech.authentification_service.service.refreshtoken.RefreshTokenService;
 import com.fasterxml.jackson.core.JsonParseException;
 import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -23,23 +23,24 @@ import java.util.*;
 
 public class JWTAuthenticationFilter extends UsernamePasswordAuthenticationFilter {
 
-    private AuthenticationManager authenticationManager;
+    private final AuthenticationManager authenticationManager;
+    private final JwtTokenService jwtTokenService;
+    private final RefreshTokenService refreshTokenService;
 
-    private final Long expTime;
-    private final String secret;
-
-    public JWTAuthenticationFilter(AuthenticationManager authenticationManager, Long expTime, String secret) {
+    public JWTAuthenticationFilter(AuthenticationManager authenticationManager,
+                                   JwtTokenService jwtTokenService,
+                                   RefreshTokenService refreshTokenService) {
         super();
         this.authenticationManager = authenticationManager;
-        this.expTime = expTime;
-        this.secret = secret;
+        this.jwtTokenService = jwtTokenService;
+        this.refreshTokenService = refreshTokenService;
     }
 
     @Override
     public Authentication attemptAuthentication(HttpServletRequest request, HttpServletResponse response)
             throws AuthenticationException {
 
-        MyUser user =null;
+        MyUser user = null;
         try {
             user = new ObjectMapper().readValue(request.getInputStream(), MyUser.class);
         } catch (JsonParseException e) {
@@ -50,8 +51,8 @@ public class JWTAuthenticationFilter extends UsernamePasswordAuthenticationFilte
             e.printStackTrace();
         }
 
-        return authenticationManager.
-                authenticate(new UsernamePasswordAuthenticationToken(user.getUsername(),user.getPassword()));
+        return authenticationManager
+                .authenticate(new UsernamePasswordAuthenticationToken(user.getUsername(), user.getPassword()));
     }
 
     @Override
@@ -62,17 +63,13 @@ public class JWTAuthenticationFilter extends UsernamePasswordAuthenticationFilte
                 (org.springframework.security.core.userdetails.User) authResult.getPrincipal();
 
         List<String> roles = new ArrayList<>();
-        springUser.getAuthorities().forEach(au-> {
-            roles.add(au.getAuthority());
-        });
+        springUser.getAuthorities().forEach(au -> roles.add(au.getAuthority()));
 
-        String jwt = JWT.create().
-                withSubject(springUser.getUsername()).
-                withArrayClaim("roles", roles.toArray(new String[roles.size()])).
-                withExpiresAt(new Date(System.currentTimeMillis() + this.expTime)).
-                sign(Algorithm.HMAC256(this.secret));
+        String accessToken = jwtTokenService.createAccessToken(springUser.getUsername(), roles);
+        RefreshToken refreshToken = refreshTokenService.createRefreshToken(springUser.getUsername());
 
-        response.addHeader("Authorization", jwt);
+        response.addHeader("Authorization", accessToken);
+        response.addHeader("Refresh-Token", refreshToken.getToken());
     }
 
     @Override

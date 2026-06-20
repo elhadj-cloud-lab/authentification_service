@@ -2,8 +2,8 @@ package com.bestech.authentification_service.security;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletResponse;
+import com.bestech.authentification_service.service.refreshtoken.RefreshTokenService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -20,16 +20,16 @@ import org.springframework.web.cors.CorsConfiguration;
 import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 @EnableWebSecurity
 @Configuration
 @RequiredArgsConstructor
 public class SecurityConfig {
-    @Value("${jwt.expiration}")
-    private Long  EXP_TIME;
-    @Value("${jwt.secret}")
-    private String SECRET;
+
+    private final JwtTokenService jwtTokenService;
+    private final RefreshTokenService refreshTokenService;
 
     @Bean
     public BCryptPasswordEncoder passwordEncoder() {
@@ -71,19 +71,19 @@ public class SecurityConfig {
                     corsConfig.setAllowedOrigins(Collections.singletonList("http://localhost:4200"));
                     corsConfig.setAllowedMethods(Collections.singletonList("*"));
                     corsConfig.setAllowedHeaders(Collections.singletonList("*"));
-                    corsConfig.setExposedHeaders(Collections.singletonList("Authorization"));
+                    corsConfig.setExposedHeaders(List.of("Authorization", "Refresh-Token"));
                     return corsConfig;
                 }))
 
                 .authorizeHttpRequests(requests -> requests
-                        .requestMatchers("/login", "/register/**", "/verifyEmail/**").permitAll()
+                        .requestMatchers("/login", "/refresh", "/register/**", "/verifyEmail/**").permitAll()
                         .requestMatchers("/actuator/health", "/actuator/info", "/actuator/**").permitAll()
                         //.requestMatchers("/users/actuator/health", "/users/actuator/info").permitAll()
                         .requestMatchers("/all").hasAuthority("ADMIN")
                         .anyRequest().authenticated()
                 )
 
-                .addFilterBefore(new JWTAuthenticationFilter(authManager,EXP_TIME,SECRET),
+                .addFilterBefore(new JWTAuthenticationFilter(authManager, jwtTokenService, refreshTokenService),
                         UsernamePasswordAuthenticationFilter.class)
 
                 .addFilterBefore(new JWTAuthorizationFilter(),
