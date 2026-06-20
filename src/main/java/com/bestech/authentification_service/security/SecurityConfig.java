@@ -6,6 +6,7 @@ import com.bestech.authentification_service.service.refreshtoken.RefreshTokenSer
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -30,6 +31,7 @@ public class SecurityConfig {
 
     private final JwtTokenService jwtTokenService;
     private final RefreshTokenService refreshTokenService;
+    private final JWTAuthorizationFilter jwtAuthorizationFilter;
 
     @Bean
     public BCryptPasswordEncoder passwordEncoder() {
@@ -52,6 +54,19 @@ public class SecurityConfig {
                 .csrf(AbstractHttpConfigurer::disable)
 
                 .exceptionHandling(ex -> ex
+                        .authenticationEntryPoint((request, response, authException) -> {
+                            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                            response.setContentType("application/json");
+
+                            Map<String, Object> error = new HashMap<>();
+                            error.put("timestamp", LocalDateTime.now().toString());
+                            error.put("status", HttpServletResponse.SC_UNAUTHORIZED);
+                            error.put("error", "Unauthorized");
+                            error.put("message", "Authentication required");
+                            error.put("path", request.getRequestURI());
+
+                            new ObjectMapper().writeValue(response.getOutputStream(), error);
+                        })
                         .accessDeniedHandler((request, response, accessDeniedException) -> {
                             response.setStatus(HttpServletResponse.SC_FORBIDDEN);
                             response.setContentType("application/json");
@@ -66,6 +81,8 @@ public class SecurityConfig {
                             new ObjectMapper().writeValue(response.getOutputStream(), error);
                         })
                 )
+                .formLogin(AbstractHttpConfigurer::disable)
+                .logout(AbstractHttpConfigurer::disable)
                 .cors(cors -> cors.configurationSource(request -> {
                     CorsConfiguration corsConfig = new CorsConfiguration();
                     corsConfig.setAllowedOrigins(Collections.singletonList("http://localhost:4200"));
@@ -77,6 +94,7 @@ public class SecurityConfig {
 
                 .authorizeHttpRequests(requests -> requests
                         .requestMatchers("/login", "/refresh", "/register/**", "/verifyEmail/**").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/admin/revoke/**").hasAuthority("ADMIN")
                         .requestMatchers("/actuator/health", "/actuator/info", "/actuator/**").permitAll()
                         //.requestMatchers("/users/actuator/health", "/users/actuator/info").permitAll()
                         .requestMatchers("/all").hasAuthority("ADMIN")
@@ -86,7 +104,7 @@ public class SecurityConfig {
                 .addFilterBefore(new JWTAuthenticationFilter(authManager, jwtTokenService, refreshTokenService),
                         UsernamePasswordAuthenticationFilter.class)
 
-                .addFilterBefore(new JWTAuthorizationFilter(),
+                .addFilterBefore(jwtAuthorizationFilter,
                         UsernamePasswordAuthenticationFilter.class);
         return http.build();
     }

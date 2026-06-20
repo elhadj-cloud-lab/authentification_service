@@ -25,6 +25,10 @@ jwt:
   refresh-expiration: ${JWT_REFRESH_EXPIRATION:604800000} # refresh token : 7 jours
 
 spring:
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
   logging:
     level:
       org.springframework.security: DEBUG
