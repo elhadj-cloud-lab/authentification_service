@@ -2,6 +2,7 @@ package com.bestech.authentification_service.security;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletResponse;
+import com.bestech.authentification_service.service.LoginEventService;
 import com.bestech.authentification_service.service.refreshtoken.RefreshTokenService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
@@ -32,6 +33,7 @@ public class SecurityConfig {
     private final JwtTokenService jwtTokenService;
     private final RefreshTokenService refreshTokenService;
     private final JWTAuthorizationFilter jwtAuthorizationFilter;
+    private final LoginEventService loginEventService;
 
     @Bean
     public BCryptPasswordEncoder passwordEncoder() {
@@ -95,17 +97,19 @@ public class SecurityConfig {
                 .authorizeHttpRequests(requests -> requests
                         .requestMatchers("/login", "/refresh", "/register/**", "/verifyEmail/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/admin/revoke/**").hasAuthority("ADMIN")
+                        .requestMatchers("/api/admin/stats/**").hasAuthority("ADMIN")
                         .requestMatchers("/actuator/health", "/actuator/info", "/actuator/**").permitAll()
-                        //.requestMatchers("/users/actuator/health", "/users/actuator/info").permitAll()
                         .requestMatchers("/all").hasAuthority("ADMIN")
                         .anyRequest().authenticated()
                 )
 
-                .addFilterBefore(new JWTAuthenticationFilter(authManager, jwtTokenService, refreshTokenService),
+                .addFilterBefore(
+                        new JWTAuthenticationFilter(authManager, jwtTokenService, refreshTokenService, loginEventService),
                         UsernamePasswordAuthenticationFilter.class)
 
                 .addFilterBefore(jwtAuthorizationFilter,
                         UsernamePasswordAuthenticationFilter.class);
+
         return http.build();
     }
 }
