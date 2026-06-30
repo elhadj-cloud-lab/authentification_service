@@ -66,14 +66,31 @@ jobs:
           distribution: 'temurin'
           cache: 'maven'
 
-      - name: Build and test
+      - name: Build, test and coverage
         run: mvn clean verify
+
+      - name: SonarCloud Analysis (PR)
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_ORGANIZATION: ${{ vars.SONAR_ORGANIZATION }}
+        run: |
+          mvn sonar:sonar \
+            -Dsonar.token=$SONAR_TOKEN \
+            -Dsonar.host.url=https://sonarcloud.io \
+            -Dsonar.organization=$SONAR_ORGANIZATION \
+            -Dsonar.qualitygate.wait=false \
+            -Dsonar.pullrequest.key=${{ github.event.pull_request.number }} \
+            -Dsonar.pullrequest.branch=${{ github.head_ref }} \
+            -Dsonar.pullrequest.base=${{ github.base_ref }}
+
       - name: Upload test reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: test-reports
-          path: target/surefire-reports
+          path: |
+            target/surefire-reports
+            target/site/jacoco
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -116,8 +133,27 @@ jobs:
           distribution: 'temurin'
           cache: 'maven'
 
-      - name: Build and test
+      - name: Build, test and coverage
         run: mvn clean verify
+
+      - name: SonarCloud Analysis (DEV)
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_ORGANIZATION: ${{ vars.SONAR_ORGANIZATION }}
+        run: |
+          mvn sonar:sonar \
+            -Dsonar.token=$SONAR_TOKEN \
+            -Dsonar.host.url=https://sonarcloud.io \
+            -Dsonar.organization=$SONAR_ORGANIZATION \
+            -Dsonar.qualitygate.wait=false
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jacoco-report-dev
+          path: target/site/jacoco
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -168,8 +204,27 @@ jobs:
           distribution: 'temurin'
           cache: 'maven'
 
-      - name: Build and test
+      - name: Build, test and coverage
         run: mvn clean verify
+
+      - name: SonarCloud Analysis (PROD)
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_ORGANIZATION: ${{ vars.SONAR_ORGANIZATION }}
+        run: |
+          mvn sonar:sonar \
+            -Dsonar.token=$SONAR_TOKEN \
+            -Dsonar.host.url=https://sonarcloud.io \
+            -Dsonar.organization=$SONAR_ORGANIZATION \
+            -Dsonar.qualitygate.wait=false
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jacoco-report-prod
+          path: target/site/jacoco
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
