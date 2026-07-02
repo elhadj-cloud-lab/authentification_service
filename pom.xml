@@ -148,6 +148,22 @@
 			<groupId>org.jacoco</groupId>
 			<artifactId>jacoco-maven-plugin</artifactId>
 			<version>${jacoco.version}</version>
+			<configuration>
+				<!-- Excluded: generated / infrastructure code not meaningful to unit-test -->
+				<excludes>
+					<exclude>**/AuthentificationServiceApplication*</exclude>
+					<exclude>**/model/**</exclude>
+					<exclude>**/dto/**</exclude>
+					<exclude>**/init/**</exclude>
+					<exclude>**/repository/**</exclude>
+					<exclude>**/service/register/VerificationTokenRepository*</exclude>
+					<exclude>**/service/register/RegistrationRequest*</exclude>
+					<exclude>**/service/exceptions/ErrorDetails*</exclude>
+					<exclude>**/security/RedisTokenBlacklistService*</exclude>
+					<exclude>**/security/SecurityConfig*</exclude>
+					<exclude>**/security/TokenBlacklistService*</exclude>
+				</excludes>
+			</configuration>
 			<executions>
 				<execution>
 					<id>jacoco-prepare-agent</id>
@@ -175,7 +191,7 @@
 									<limit>
 										<counter>INSTRUCTION</counter>
 										<value>COVEREDRATIO</value>
-										<minimum>0.00</minimum>
+										<minimum>0.80</minimum>
 									</limit>
 								</limits>
 							</rule>
