@@ -43,7 +43,7 @@ class MyUserDetailsServiceTest {
 
         assertThat(result.getUsername()).isEqualTo("alice");
         assertThat(result.getPassword()).isEqualTo("$2a$encoded");
-        assertThat(result.isEnabled()).isTrue();
+        assertThat(result.isEnabled()).isTrue(); // Spring's UserDetails.isEnabled()
         assertThat(result.getAuthorities()).hasSize(1);
         assertThat(result.getAuthorities().iterator().next().getAuthority()).isEqualTo("ADMIN");
     }
@@ -81,7 +81,7 @@ class MyUserDetailsServiceTest {
         UserDetails result = myUserDetailsService.loadUserByUsername("carol");
 
         assertThat(result.getAuthorities()).isEmpty();
-        assertThat(result.isEnabled()).isFalse();
+        assertThat(result.isEnabled()).isFalse(); // Spring's UserDetails.isEnabled()
     }
 
     @Test

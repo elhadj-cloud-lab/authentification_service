@@ -1,4 +1,4 @@
-package com.bestech.authentification_service.Controllers;
+package com.bestech.authentification_service.controller;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;

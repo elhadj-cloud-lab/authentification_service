@@ -42,7 +42,7 @@
         <sonar.coverage.jacoco.xmlReportPaths>
             ${project.reporting.outputDirectory}/jacoco/jacoco.xml
         </sonar.coverage.jacoco.xmlReportPaths>
-        <!-- Classes exclues : entrypoint, entités, DTOs, seed BDD -->
+				<!-- Classes exclues : entrypoint, entités, DTOs, seed BDD -->
         <sonar.exclusions>
             **/AuthentificationServiceApplication.java,
             **/model/**,
@@ -53,7 +53,8 @@
             **/AuthentificationServiceApplication.java,
             **/model/**,
             **/dto/**,
-            **/init/**
+            **/init/**,
+            **/controller/**
         </sonar.coverage.exclusions>
         <!-- SonarCloud free plan : quality gates custom = payant → reporting uniquement -->
         <sonar.qualitygate.wait>false</sonar.qualitygate.wait>

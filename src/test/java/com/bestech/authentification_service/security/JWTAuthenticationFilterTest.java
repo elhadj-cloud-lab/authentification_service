@@ -3,6 +3,7 @@ package com.bestech.authentification_service.security;
 import com.bestech.authentification_service.service.LoginEventService;
 import com.bestech.authentification_service.service.refreshtoken.RefreshToken;
 import com.bestech.authentification_service.service.refreshtoken.RefreshTokenService;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -19,7 +20,6 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.User;
 
-import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 
@@ -41,7 +41,8 @@ class JWTAuthenticationFilterTest {
     @BeforeEach
     void setUp() {
         filter = new JWTAuthenticationFilter(
-                authenticationManager, jwtTokenService, refreshTokenService, loginEventService);
+                authenticationManager, jwtTokenService, refreshTokenService, loginEventService,
+                new ObjectMapper());
     }
 
     @Test

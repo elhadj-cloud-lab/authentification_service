@@ -115,7 +115,7 @@ class UserServiceImplTest {
 
         assertThat(result.getUsername()).isEqualTo("alice");
         assertThat(result.getEmail()).isEqualTo("alice@test.com");
-        assertThat(result.getEnabled()).isFalse();
+        assertThat(result.isEnabled()).isFalse();
         verify(emailSender).sendEmail(eq("alice@test.com"), any(String.class));
         verify(verificationTokenRepository).save(any(VerificationToken.class));
     }
@@ -143,7 +143,7 @@ class UserServiceImplTest {
 
         MyUser result = userService.validateToken("123456");
 
-        assertThat(result.getEnabled()).isTrue();
+        assertThat(result.isEnabled()).isTrue();
         verify(userRepository).save(user);
     }
 

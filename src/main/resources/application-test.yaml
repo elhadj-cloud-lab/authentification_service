@@ -13,6 +13,7 @@ spring:
   mail:
     host: localhost
     port: 9999
+    from: noreply@test.local
 
   autoconfigure:
     exclude:
