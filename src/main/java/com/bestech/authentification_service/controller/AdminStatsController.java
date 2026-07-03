@@ -1,4 +1,4 @@
-package com.bestech.authentification_service.Controllers;
+package com.bestech.authentification_service.controller;
 
 import com.bestech.authentification_service.dto.DashboardStatsDto;
 import com.bestech.authentification_service.service.LoginEventService;

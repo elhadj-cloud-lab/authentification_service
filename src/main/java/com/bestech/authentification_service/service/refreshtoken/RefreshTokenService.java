@@ -54,7 +54,7 @@ public class RefreshTokenService {
         }
 
         MyUser user = token.getUser();
-        if (!Boolean.TRUE.equals(user.getEnabled())) {
+        if (!user.isEnabled()) {
             throw new InvalidTokenException("Utilisateur désactivé");
         }
 

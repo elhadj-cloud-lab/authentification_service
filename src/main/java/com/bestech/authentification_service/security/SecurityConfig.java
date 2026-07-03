@@ -34,6 +34,7 @@ public class SecurityConfig {
     private final RefreshTokenService refreshTokenService;
     private final JWTAuthorizationFilter jwtAuthorizationFilter;
     private final LoginEventService loginEventService;
+    private final ObjectMapper objectMapper;
 
     @Bean
     public BCryptPasswordEncoder passwordEncoder() {
@@ -67,7 +68,7 @@ public class SecurityConfig {
                             error.put("message", "Authentication required");
                             error.put("path", request.getRequestURI());
 
-                            new ObjectMapper().writeValue(response.getOutputStream(), error);
+                            objectMapper.writeValue(response.getOutputStream(), error);
                         })
                         .accessDeniedHandler((request, response, accessDeniedException) -> {
                             response.setStatus(HttpServletResponse.SC_FORBIDDEN);
@@ -80,7 +81,7 @@ public class SecurityConfig {
                             error.put("message", "Access Denied");
                             error.put("path", request.getRequestURI());
 
-                            new ObjectMapper().writeValue(response.getOutputStream(), error);
+                            objectMapper.writeValue(response.getOutputStream(), error);
                         })
                 )
                 .formLogin(AbstractHttpConfigurer::disable)
@@ -104,7 +105,7 @@ public class SecurityConfig {
                 )
 
                 .addFilterBefore(
-                        new JWTAuthenticationFilter(authManager, jwtTokenService, refreshTokenService, loginEventService),
+                        new JWTAuthenticationFilter(authManager, jwtTokenService, refreshTokenService, loginEventService, objectMapper),
                         UsernamePasswordAuthenticationFilter.class)
 
                 .addFilterBefore(jwtAuthorizationFilter,

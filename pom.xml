@@ -31,6 +31,33 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
         <testcontainers.version>1.21.4</testcontainers.version>
+        <jacoco.version>0.8.12</jacoco.version>
+
+        <!-- ── SonarCloud ──────────────────────────────────────────── -->
+        <sonar.host.url>https://sonarcloud.io</sonar.host.url>
+        <!-- SONAR_ORGANIZATION = variable GitHub Actions ou env local -->
+        <sonar.organization>${env.SONAR_ORGANIZATION}</sonar.organization>
+        <sonar.projectKey>authentification-service</sonar.projectKey>
+        <sonar.projectName>Authentification Service</sonar.projectName>
+        <sonar.coverage.jacoco.xmlReportPaths>
+            ${project.reporting.outputDirectory}/jacoco/jacoco.xml
+        </sonar.coverage.jacoco.xmlReportPaths>
+				<!-- Classes exclues : entrypoint, entités, DTOs, seed BDD -->
+        <sonar.exclusions>
+            **/AuthentificationServiceApplication.java,
+            **/model/**,
+            **/dto/**,
+            **/init/**
+        </sonar.exclusions>
+        <sonar.coverage.exclusions>
+            **/AuthentificationServiceApplication.java,
+            **/model/**,
+            **/dto/**,
+            **/init/**,
+            **/controller/**
+        </sonar.coverage.exclusions>
+        <!-- SonarCloud free plan : quality gates custom = payant → reporting uniquement -->
+        <sonar.qualitygate.wait>false</sonar.qualitygate.wait>
 	</properties>
 	<dependencies>
 		<dependency>
@@ -117,7 +144,72 @@
 					</excludes>
 				</configuration>
 			</plugin>
-			<plugin>
+			<!-- ── JaCoCo : mesure de couverture ──────────────────────────── -->
+		<plugin>
+			<groupId>org.jacoco</groupId>
+			<artifactId>jacoco-maven-plugin</artifactId>
+			<version>${jacoco.version}</version>
+			<configuration>
+				<!-- Excluded: generated / infrastructure code not meaningful to unit-test -->
+				<excludes>
+					<exclude>**/AuthentificationServiceApplication*</exclude>
+					<exclude>**/model/**</exclude>
+					<exclude>**/dto/**</exclude>
+					<exclude>**/init/**</exclude>
+					<exclude>**/repository/**</exclude>
+					<exclude>**/service/register/VerificationTokenRepository*</exclude>
+					<exclude>**/service/register/RegistrationRequest*</exclude>
+					<exclude>**/service/exceptions/ErrorDetails*</exclude>
+					<exclude>**/security/RedisTokenBlacklistService*</exclude>
+					<exclude>**/security/SecurityConfig*</exclude>
+					<exclude>**/security/TokenBlacklistService*</exclude>
+				</excludes>
+			</configuration>
+			<executions>
+				<execution>
+					<id>jacoco-prepare-agent</id>
+					<goals><goal>prepare-agent</goal></goals>
+				</execution>
+				<execution>
+					<id>jacoco-report</id>
+					<phase>verify</phase>
+					<goals><goal>report</goal></goals>
+				</execution>
+				<!--
+				  Seuil de couverture : monter progressivement vers 0.80
+				  Valeur actuelle : 0.00 → ne bloque pas le CI
+				  Prochaines étapes : 0.20 → 0.40 → 0.60 → 0.80
+				-->
+				<execution>
+					<id>jacoco-check</id>
+					<phase>verify</phase>
+					<goals><goal>check</goal></goals>
+					<configuration>
+						<rules>
+							<rule>
+								<element>BUNDLE</element>
+								<limits>
+									<limit>
+										<counter>INSTRUCTION</counter>
+										<value>COVEREDRATIO</value>
+										<minimum>0.80</minimum>
+									</limit>
+								</limits>
+							</rule>
+						</rules>
+					</configuration>
+				</execution>
+			</executions>
+		</plugin>
+
+		<!-- ── Sonar Maven Plugin ──────────────────────────────────── -->
+		<plugin>
+			<groupId>org.sonarsource.scanner.maven</groupId>
+			<artifactId>sonar-maven-plugin</artifactId>
+			<version>4.0.0.4121</version>
+		</plugin>
+
+		<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-compiler-plugin</artifactId>
 				<executions>

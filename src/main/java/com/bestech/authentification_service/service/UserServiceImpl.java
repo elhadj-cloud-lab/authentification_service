@@ -12,31 +12,22 @@ import com.bestech.authentification_service.service.register.VerificationToken;
 import com.bestech.authentification_service.service.register.VerificationTokenRepository;
 import com.bestech.authentification_service.util.EmailSender;
 import jakarta.transaction.Transactional;
-import org.springframework.beans.factory.annotation.Autowired;
+import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 
-import javax.management.relation.RoleNotFoundException;
 import java.util.*;
 
 @Transactional
 @Service
+@RequiredArgsConstructor
 public class UserServiceImpl implements UserService {
 
-    @Autowired
-    UserRepository userRepository;
-
-    @Autowired
-    RoleRepository roleRepository;
-
-    @Autowired
-    BCryptPasswordEncoder bCryptPasswordEncoder;
-
-    @Autowired
-    VerificationTokenRepository verificationTokenRepository;
-
-    @Autowired
-    EmailSender emailSender;
+    private final UserRepository userRepository;
+    private final RoleRepository roleRepository;
+    private final BCryptPasswordEncoder bCryptPasswordEncoder;
+    private final VerificationTokenRepository verificationTokenRepository;
+    private final EmailSender emailSender;
 
     @Override
     public MyUser saveUser(MyUser user) {
@@ -58,7 +49,6 @@ public class UserServiceImpl implements UserService {
     public MyUser addRoleToUser(String username, String rolename) {
         MyUser user = findUserByUsername(username);
         Role role = roleRepository.findByRole(rolename);
-
         user.getRoles().add(role);
         return userRepository.save(user);
     }
@@ -70,48 +60,36 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public MyUser registerUser(RegistrationRequest request) {
-        Optional<MyUser>  optionalUser = userRepository.findByEmail(request.getEmail());
-        if(optionalUser.isPresent())
+        if (userRepository.findByEmail(request.getEmail()).isPresent()) {
             throw new EmailAlreadyExistsException("Email déjà existant!");
+        }
 
         MyUser newUser = new MyUser();
         newUser.setUsername(request.getUsername());
         newUser.setEmail(request.getEmail());
-        newUser.setPassword( bCryptPasswordEncoder.encode( request.getPassword() )  );
+        newUser.setPassword(bCryptPasswordEncoder.encode(request.getPassword()));
         newUser.setEnabled(false);
 
         Role r = roleRepository.findByRole("USER");
-        List<Role> roles = new ArrayList<>();
-        roles.add(r);
-        newUser.setRoles(roles);
+        newUser.setRoles(new ArrayList<>(List.of(r)));
 
         MyUser savedUser = userRepository.save(newUser);
 
-        //génére le code secret
-        String code = this.generateCode();
-
-        VerificationToken token = new VerificationToken(code, newUser);
-        verificationTokenRepository.save(token);
-
-        //envoyer le code par email à l'utilisateur
-        sendEmailUser(newUser,token.getToken());
+        String code = generateCode();
+        verificationTokenRepository.save(new VerificationToken(code, newUser));
+        sendEmailUser(newUser, code);
 
         return savedUser;
     }
 
     private String generateCode() {
-        Random random = new Random();
-        Integer code = 100000 + random.nextInt(900000);
-
-        return code.toString();
-
+        return String.valueOf(100000 + new Random().nextInt(900000));
     }
 
     @Override
     public void sendEmailUser(MyUser user, String code) {
-        String emailBody ="Bonjour "+ "<h1>"+user.getUsername() +"</h1>" +
-                " Votre code de validation est "+"<h1>"+code+"</h1>";
-
+        String emailBody = "Bonjour " + "<h1>" + user.getUsername() + "</h1>"
+                + " Votre code de validation est " + "<h1>" + code + "</h1>";
         emailSender.sendEmail(user.getEmail(), emailBody);
     }
 
@@ -119,22 +97,18 @@ public class UserServiceImpl implements UserService {
     public MyUser validateToken(String code) {
         VerificationToken token = verificationTokenRepository.findByToken(code);
 
-        if(token == null){
-            throw new InvalidTokenException("Invalid Token !!!!!!!");
+        if (token == null) {
+            throw new InvalidTokenException("Token invalide");
+        }
+
+        Calendar calendar = Calendar.getInstance();
+        if ((token.getExpirationTime().getTime() - calendar.getTime().getTime()) <= 0) {
+            verificationTokenRepository.delete(token);
+            throw new ExpiredTokenException("Token expiré");
         }
 
         MyUser user = token.getUser();
-
-        Calendar calendar = Calendar.getInstance();
-
-        if ((token.getExpirationTime().getTime() - calendar.getTime().getTime()) <= 0){
-            verificationTokenRepository.delete(token);
-            throw new ExpiredTokenException("expired Token");
-        }
-
         user.setEnabled(true);
-        userRepository.save(user);
-        return user;
-
+        return userRepository.save(user);
     }
 }

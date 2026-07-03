@@ -22,7 +22,7 @@ public class MyUser {
     @Column(unique=true)
     private String username;
     private String password;
-    private Boolean enabled;
+    private boolean enabled;
     private String email;
 
     @ManyToMany(cascade = CascadeType.MERGE, fetch = FetchType.EAGER)

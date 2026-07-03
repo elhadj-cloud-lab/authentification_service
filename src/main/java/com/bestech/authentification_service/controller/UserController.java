@@ -1,4 +1,4 @@
-package com.bestech.authentification_service.Controllers;
+package com.bestech.authentification_service.controller;
 
 import com.bestech.authentification_service.model.MyUser;
 import com.bestech.authentification_service.service.UserService;
