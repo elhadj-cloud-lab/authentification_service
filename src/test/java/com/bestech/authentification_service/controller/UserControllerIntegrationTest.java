@@ -1,4 +1,4 @@
-package com.bestech.authentification_service.Controllers;
+package com.bestech.authentification_service.controller;
 
 import com.bestech.authentification_service.util.EmailSender;
 import com.bestech.authentification_service.util.TestJwtHelper;

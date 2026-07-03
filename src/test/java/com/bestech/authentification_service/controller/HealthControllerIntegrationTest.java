@@ -1,4 +1,4 @@
-package com.bestech.authentification_service.Controllers;
+package com.bestech.authentification_service.controller;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
