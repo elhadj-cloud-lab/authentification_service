@@ -16,12 +16,16 @@ management:
 
 jwt:
   secret: ${JWT_SECRET}
-  expiration: 864000000
-  refresh-expiration: 604800000
+  expiration: ${JWT_ACCESS_EXPIRATION:900000}
+  refresh-expiration: ${JWT_REFRESH_EXPIRATION:604800000}
 
 spring:
   application:
     name: authentification-service
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
   datasource:
     url: ${SPRING_DATASOURCE_URL}
     username: ${SPRING_DATASOURCE_USERNAME}

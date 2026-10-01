@@ -1,8 +1,9 @@
 package com.bestech.authentification_service.security;
 
-import com.auth0.jwt.JWT;
-import com.auth0.jwt.algorithms.Algorithm;
 import com.bestech.authentification_service.model.MyUser;
+import com.bestech.authentification_service.service.LoginEventService;
+import com.bestech.authentification_service.service.refreshtoken.RefreshToken;
+import com.bestech.authentification_service.service.refreshtoken.RefreshTokenService;
 import com.fasterxml.jackson.core.JsonParseException;
 import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -23,35 +24,46 @@ import java.util.*;
 
 public class JWTAuthenticationFilter extends UsernamePasswordAuthenticationFilter {
 
-    private AuthenticationManager authenticationManager;
+    private static final String ATTR_USERNAME = "attempted_username";
 
-    private final Long expTime;
-    private final String secret;
+    private final AuthenticationManager authenticationManager;
+    private final JwtTokenService jwtTokenService;
+    private final RefreshTokenService refreshTokenService;
+    private final LoginEventService loginEventService;
 
-    public JWTAuthenticationFilter(AuthenticationManager authenticationManager, Long expTime, String secret) {
+    public JWTAuthenticationFilter(AuthenticationManager authenticationManager,
+                                   JwtTokenService jwtTokenService,
+                                   RefreshTokenService refreshTokenService,
+                                   LoginEventService loginEventService) {
         super();
         this.authenticationManager = authenticationManager;
-        this.expTime = expTime;
-        this.secret = secret;
+        this.jwtTokenService = jwtTokenService;
+        this.refreshTokenService = refreshTokenService;
+        this.loginEventService = loginEventService;
+        setFilterProcessesUrl("/login");
     }
 
     @Override
     public Authentication attemptAuthentication(HttpServletRequest request, HttpServletResponse response)
             throws AuthenticationException {
 
-        MyUser user =null;
+        MyUser user = null;
         try {
             user = new ObjectMapper().readValue(request.getInputStream(), MyUser.class);
-        } catch (JsonParseException e) {
-            e.printStackTrace();
-        } catch (JsonMappingException e) {
+        } catch (JsonParseException | JsonMappingException e) {
             e.printStackTrace();
         } catch (IOException e) {
             e.printStackTrace();
         }
 
-        return authenticationManager.
-                authenticate(new UsernamePasswordAuthenticationToken(user.getUsername(),user.getPassword()));
+        if (user != null && user.getUsername() != null) {
+            request.setAttribute(ATTR_USERNAME, user.getUsername());
+        }
+
+        return authenticationManager.authenticate(new UsernamePasswordAuthenticationToken(
+                user != null ? user.getUsername() : null,
+                user != null ? user.getPassword() : null
+        ));
     }
 
     @Override
@@ -62,23 +74,36 @@ public class JWTAuthenticationFilter extends UsernamePasswordAuthenticationFilte
                 (org.springframework.security.core.userdetails.User) authResult.getPrincipal();
 
         List<String> roles = new ArrayList<>();
-        springUser.getAuthorities().forEach(au-> {
-            roles.add(au.getAuthority());
-        });
+        springUser.getAuthorities().forEach(au -> roles.add(au.getAuthority()));
 
-        String jwt = JWT.create().
-                withSubject(springUser.getUsername()).
-                withArrayClaim("roles", roles.toArray(new String[roles.size()])).
-                withExpiresAt(new Date(System.currentTimeMillis() + this.expTime)).
-                sign(Algorithm.HMAC256(this.secret));
+        String accessToken = jwtTokenService.createAccessToken(springUser.getUsername(), roles);
+        RefreshToken refreshToken = refreshTokenService.createRefreshToken(springUser.getUsername());
 
-        response.addHeader("Authorization", jwt);
+        loginEventService.recordSuccess(
+                springUser.getUsername(),
+                extractClientIp(request),
+                request.getHeader("User-Agent")
+        );
+
+        response.addHeader("Authorization", accessToken);
+        response.addHeader("Refresh-Token", refreshToken.getToken());
     }
 
     @Override
     protected void unsuccessfulAuthentication(HttpServletRequest request,
                                               HttpServletResponse response, AuthenticationException failed)
             throws IOException, ServletException {
+
+        String username = (String) request.getAttribute(ATTR_USERNAME);
+        String reason = failed instanceof DisabledException ? "DISABLED" : "INVALID_CREDENTIALS";
+
+        loginEventService.recordFailure(
+                username,
+                extractClientIp(request),
+                request.getHeader("User-Agent"),
+                reason
+        );
+
         if (failed instanceof DisabledException) {
             response.setStatus(HttpServletResponse.SC_FORBIDDEN);
             response.setContentType("application/json");
@@ -93,5 +118,13 @@ public class JWTAuthenticationFilter extends UsernamePasswordAuthenticationFilte
         } else {
             super.unsuccessfulAuthentication(request, response, failed);
         }
+    }
+
+    private String extractClientIp(HttpServletRequest request) {
+        String xff = request.getHeader("X-Forwarded-For");
+        if (xff != null && !xff.isBlank()) {
+            return xff.split(",")[0].trim();
+        }
+        return request.getRemoteAddr();
     }
 }
